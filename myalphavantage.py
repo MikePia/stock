@@ -45,7 +45,7 @@ FUNCTION = {'intraday':  'TIME_SERIES_INTRADAY',
             'atr': 'ATR'
             }
 
-# The redundancy serves as documentation in code
+# The redundancy serves as documentation in code. These are the params required for each function
 PARAMS = {'intraday':  ['symbol', 'datatype', 'apikey', 'outputsize', 'interval'],
           'daily':  ['symbol', 'datatype', 'apikey', 'outputsize'],
           'dailyadj':  ['symbol', 'datatype', 'apikey', 'outputsize'],
@@ -57,8 +57,7 @@ PARAMS = {'intraday':  ['symbol', 'datatype', 'apikey', 'outputsize', 'interval'
           'search':  ['keywords', 'datatype', 'apikey'],
           'sma':  ['symbol', 'datatype', 'apikey', 'interval', 'time_period', 'series_type'],
           'ema':  ['symbol', 'datatype', 'apikey', 'interval', 'time_period', 'series_type'],
-          'atr':  ['symbol', 'datatype', 'apikey', 'interval', 'time_period'],
-
+          'atr':  ['symbol', 'datatype', 'apikey', 'interval', 'time_period']
           }
 
 DATATYPES = ('json', 'csv')       # json is default
@@ -129,7 +128,7 @@ def ni(i):
 
 
 # This is good enough for now. Maybe write a general method for all the alphavantage APIs.
-# Alternately do the minimum by implementing a daily method and a moving average method.
+# Alternately do the minimum by implementing a daily method and a moving average method. 
 
 # Set the apikey in the module or class
 # Set datatype in the module or class but return pandas for all
@@ -137,11 +136,13 @@ def ni(i):
 def getmav_intraday(symbol, start=None, end=None, minutes=None, theDate=None):
     '''
     Limited to getting minute data intended to chart day trades
-    :params:symb: The stock ticker
-    :parms:start: A time string formatted hh:mm to indicate the begin time for the data
-    :params:end: A time string formatted hh:mm to indicate the end time for the data
-    :params:minutes: An int for the candle time, 5 minute, 15 minute etc
-    :params:theDate: A date string formatted yyyymmdd. It will default to today
+    :params symb: The stock ticker
+    :params start: A time string formatted hh:mm to indicate the begin time for the data
+    :params end: A time string formatted hh:mm to indicate the end time for the data
+    :params minutes: An int for the candle time, 5 minute, 15 minute etc
+    :params theDate: A date string formatted yyyymmdd. It will default to today
+    :returns: A DataFrame of minute indexed by time with columns open, high, low, 
+         low, close, volume
     '''
 
     minutes = ni(minutes)
@@ -186,6 +187,7 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, theDate=None):
         df = df.loc[df.index >= start]
     if end:
         df = df.loc[df.index <= end]
+    df.sort_index(inplace=True)
 
     df.rename(columns={'1. open': 'open',
                        '2. high': 'high',

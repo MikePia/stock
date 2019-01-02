@@ -5,3 +5,5 @@ pickle*
 *.css
 *.swp
 .vscode
+bc_soap*
+__pycache__
