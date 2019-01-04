@@ -12,6 +12,10 @@ from ibapi.client import EClient
 from ibapi.common import TickerId
 from ibapi.contract import Contract
 
+from threading import Thread
+
+import queue
+
 import pandas as pd
 # import time
 # pylint: disable=C0103
@@ -25,20 +29,22 @@ BAR_SIZE = ['1 secs', '5 secs', '10 secs', '15 secs', '30 secs',
 # Needs to be a string in the form '3 D'
 DURATION_STRING = ['S', 'D', 'W', 'M', 'Y']
 
-def getLimits():
-    l=''.join(['We are only interested, in this app, in chart info, aka historical data.\n',
-               '     IB will issue a Pacing violation when:...\n',
-               '       Making identical historical data requests within 15 seconds.\n',
-               '       Making six or more historical data requests for the same Contract, Exchange and Tick Type within two seconds.\n',
-               '       Making more than 60 requests within any ten minute period.\n\n',
-               'Data older than 6 months for candles of 1 minute or less in unavailable.\n',
-               '     No hard limit for older data for intervals greater than 1 min (so they say in spite of the docs)\n'])
 
+def getLimits():
+    l = ''.join(['We are only interested, in this app, in chart info, aka historical data.\n',
+                 '     IB will issue a Pacing violation when:...\n',
+                 '       Making identical historical data requests within 15 seconds.\n',
+                 '       Making six or more historical data requests for the same Contract, Exchange and Tick Type within two seconds.\n',
+                 '       Making more than 60 requests within any ten minute period.\n\n',
+                 'Data older than 6 months for candles of 1 minute or less in unavailable.\n',
+                 '     No hard limit for older data for intervals greater than 1 min (so they say in spite of the docs)\n'])
+    return l
 
 class TestClient(EClient):
     def __init__(self, wrapprr):
         EClient.__init__(self, wrapprr)
-        # ! [socket_declare]
+        self.storage = queue.Queue()
+
 
 class TestWrapper(wrapper.EWrapper):
     def __init__(self):
@@ -46,7 +52,6 @@ class TestWrapper(wrapper.EWrapper):
 
         self.counter = 0
         self.data = []
-
 
     def contractDetails(self, reqId, contractDetails):
         '''
@@ -70,11 +75,12 @@ class TestWrapper(wrapper.EWrapper):
         if self.counter == 0:
             print("beginning")
 #             print("originally Type:", type(bar))
-            l=[]
+            l = []
             l.append(bar)
             print('time', bar.date)
         self.counter = self.counter + 1
-        self.data.append([bar.date, bar.open, bar.high, bar.low, bar.close, bar.volume])
+        self.data.append([bar.date, bar.open, bar.high,
+                          bar.low, bar.close, bar.volume])
 
     def historicalDataEnd(self, reqId: int, start: str, end: str):
         '''
@@ -86,13 +92,14 @@ class TestWrapper(wrapper.EWrapper):
         print("HistoricalDataEnd. ReqId:", reqId, "from", start, "to", end)
         print("GOT LINES:", len(self.data))
         print("TYPE:", type(self.data[0]))
-        df = pd.DataFrame(self.data, columns = ['date', 'open', 'high', 'low', 'close', 'volume'])
+        df = pd.DataFrame(self.data, columns=[
+                          'date', 'open', 'high', 'low', 'close', 'volume'])
+        print('filling the queue')
+        self.storage.put(df)
         # GDF=df
-        print(df)
+        # print(df)
 #         print(df.tail(2))
         exit()
-
-
 
 
 class TestApp(TestWrapper, TestClient):
@@ -103,14 +110,13 @@ class TestApp(TestWrapper, TestClient):
 
         self.started = False
 
-
     def start(self):
         if self.started:
             return
         self.started = True
 
         self.historicalDataOperations_req()
-    
+
     def historicalDataOperations_req(self):
         pass
         #  self.reqHistoricalData(4103, ContractSamples.EuropeanStock(), queryTime, "10 D", "1 min", "TRADES", 1, 1, False, [])
@@ -153,10 +159,19 @@ class TestApp(TestWrapper, TestClient):
         # self.reqHistoricalData(18002, ContractSamples.ContFut(), timeStr, "1 Y", "1 month", "TRADES", 0, 1, False, []);
         # queryTime = DateTime.Now.AddMonths(-6).ToString("yyyyMMdd HH:mm:ss");
         self.reqHistoricalData(4001, contract, timeStr, dur,
-                            interval, "TRADES", 1, 1, False, [])
+                                    interval, "TRADES", 1, 1, False, [])
         # client.reqHistoricalData(4002, ContractSamples.EuropeanStock(), queryTime, "10 D", "1 min", "TRADES", 1, 1, false, null);
+        print('Requesting access')
 
-        self.run()
+        # self.run()
+        thread = Thread(target=self.run)
+        thread.start()
+
+        setattr(self, "_thread", thread)
+
+        x = self.storage.get()
+        print("About to print the DataFrame from the Queue?")
+        print(x)
 
     def validateDurString(self, s):
         '''
@@ -175,15 +190,12 @@ class TestApp(TestWrapper, TestClient):
             return False
         return True
 
+
 symb = "SQ"
 daDate = dt.datetime(2018, 12, 27, 9, 0)
-dur = "1 D"
+daDur = "1 D"
 interval = "1 min"
 # chart(symb, d, dur, interval)
 ib = TestApp()
-ib.getHistorical(symb, daDate, dur, interval)
-    
-        
+ib.getHistorical(symb, daDate, daDur, interval)
 
-
-     
