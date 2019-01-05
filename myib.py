@@ -99,7 +99,7 @@ class TestWrapper(wrapper.EWrapper):
         # GDF=df
         # print(df)
 #         print(df.tail(2))
-        exit()
+        # exit()
 
 
 class TestApp(TestWrapper, TestClient):
@@ -121,7 +121,7 @@ class TestApp(TestWrapper, TestClient):
         pass
         #  self.reqHistoricalData(4103, ContractSamples.EuropeanStock(), queryTime, "10 D", "1 min", "TRADES", 1, 1, False, [])
 
-    def getHistorical(self, symbol, end, dur, interval):
+    def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
         '''
         :params end: datetime object for the end time requested
         :params dur: a string for how long before end should the chart begin "1 D"
@@ -137,7 +137,7 @@ class TestApp(TestWrapper, TestClient):
             return None
 
         if interval not in BAR_SIZE:
-            print('Bar size must be one of: {}'.format(interval))
+            print('Bar size ({}) must be one of: {}'.format(interval, BAR_SIZE))
             return None
 
         # app = Ib()
@@ -151,7 +151,7 @@ class TestApp(TestWrapper, TestClient):
         contract.secType = "STK"
         contract.exchange = "SMART"
         contract.currency = "USD"
-        contract.primaryExchange = "NASDAQ"
+        contract.primaryExchange = exchange
 
         # app.reqContractDetails(10, contract)
 
@@ -170,8 +170,9 @@ class TestApp(TestWrapper, TestClient):
         setattr(self, "_thread", thread)
 
         x = self.storage.get()
-        print("About to print the DataFrame from the Queue?")
-        print(x)
+        x.set_index('date', inplace=True)
+        # print("About to print the Da
+        return x
 
     def validateDurString(self, s):
         '''
@@ -190,12 +191,32 @@ class TestApp(TestWrapper, TestClient):
             return False
         return True
 
+def getIb_Hist(symbol, end, interval='1 min'):
+    '''
+    Wrapper of getHistorical(symb,end, dur, interval, exchange). This method is designed for stocks.
+            IB Data subscriptions may limit this to stocks only.  IB requires TWS or IBGW to send and receive 
+            any data. 
+    :params symb: The stock ticker  like 'SQ or AAPL
+    :params end: The end datetime of your request
+    :params interval: Candle length. Legitimate values are found in the BAR_SIZE property
 
-symb = "SQ"
-daDate = dt.datetime(2018, 12, 27, 9, 0)
-daDur = "1 D"
-interval = "1 min"
-# chart(symb, d, dur, interval)
-ib = TestApp()
-ib.getHistorical(symb, daDate, daDur, interval)
+    '''
+    symb = symbol
+    # daDate = end
+    interval = interval
+    daDur = "1 D"
+    # interval = "1 min"
+    # chart(symb, d, dur, interval)
+    ib = TestApp()
+    # def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
+    df = ib.getHistorical(symb, end=end, dur=daDur, interval=interval, exchange = 'NASDAQ')
+    ib.disconnect()
+    return df
 
+def help():
+    sig=df = 'ib.getHistorical(symb, end=end, dur=daDur, interval=interval, exchange = "NASDAQ")'
+
+if __name__ == '__main__':
+    end=dt.datetime.today()
+    df=getIb_Hist('SQ', end=end, interval='5 mins')
+    print(df)

@@ -106,7 +106,7 @@ def pt(t, theDate=None):
         print("Invalid time {}. Must be formatted string hh:mm".format(t))
     except AssertionError:
         print("Invalid time {}. Must be legitamte 24 hour time formatted hh:mm".format(t))
-    return f'{d.year}-{d.month}-{d.day} {t}'
+    return '{0:04d}-{1:02d}-{2:02d} {3}'.format(d.year, d.month, d.day, t)
 
 
 def ni(i):
@@ -175,19 +175,21 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, theDate=None):
     # Don't know if this is guaranteed: either 'Error Message' above,
     # or ['Meta Data', 'Time Series (1min)'] and the data (below):
     # Look for an error over a few months of use (12/18)
-    # metaj = result[keys[0]]
+    metaj = result[keys[0]]
     tsj = result[keys[1]]
 
     df = pd.DataFrame(tsj).T
 
-    start = pt(start, theDate) if start else start
+    start = pt(start, theDate)# if start else start
     end = pt(end, theDate) if end else end
 
-    if start:
-        df = df.loc[df.index >= start]
-    if end:
-        df = df.loc[df.index <= end]
-    df.sort_index(inplace=True)
+    if df.index[0] > df.index[-1]:
+        df.sort_index(inplace=True)
+
+    if start > df.index[0]:
+        df = df[df.index >= start]
+    if end < df.index[-1]:
+        df = df[df.index <= end]
 
     df.rename(columns={'1. open': 'open',
                        '2. high': 'high',
@@ -206,9 +208,11 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, theDate=None):
 #     print('docs at:', EXAMPLES['web_site'])
 #     print('Limits 5 calls per minute, 500 per day\n\n')
 
-# start = "10:30"
-# end = "16:00"
-# df = getmav_intraday("TEAM", start, end, minutes=60, theDate=dt.datetime(2018, 12, 19))
-# print(df)
-# print(APIKEY)
+start = "10:30"
+end = "16:00"
+theDate = dt.datetime(2019, 1, 3)
+
+df = getmav_intraday("TEAM", start, end, minutes=60, theDate=theDate)
+print(df)
+print(APIKEY)
 getlimits()

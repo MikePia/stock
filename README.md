@@ -1,2 +1,2 @@
 # stock
-Getting stock information from iex, alphavantage and quandl. Methods for charting.
+Getting stock information from  iex , alphavantage, native IBAPI and quandl. Methods for charting.

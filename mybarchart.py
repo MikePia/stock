@@ -89,7 +89,7 @@ DEMO_PARAMS = {'apikey': APIKEY,
 
 
 # Not getting the current date-- maybe after the market closes?
-def getbc_intraday(symbol,  start, end=dt.datetime.today(), daType='minutes', interval=5):
+def getbc_intraday(symbol,  start, end=dt.datetime.today(), minutes=5,  daType='minutes'):
     '''
     Note that getHistory will return previous day's prices until 15 minutes after the market closes. We will
         generate a warning if our start or end date differ from the response 
@@ -119,7 +119,7 @@ def getbc_intraday(symbol,  start, end=dt.datetime.today(), daType='minutes', in
     params['apikey'] = APIKEY
     params['symbol'] = symbol
     params['type'] = daType
-    params['interval'] = interval
+    params['interval'] = minutes
     params['startDate'] = s
 #     if end:
 #         params['endDate'] = end
@@ -147,7 +147,7 @@ def getbc_intraday(symbol,  start, end=dt.datetime.today(), daType='minutes', in
     # Comparing and trimming the end  using strings in barchart's date and timestamp format strings
     compareStartDate = dt.datetime(start.year, start.month, start.day).strftime("%Y-%m-%d")
     compareEndDate = dt.datetime(end.year, end.month, end.day).strftime("%Y-%m-%d")
-    compareEndTime = end.strftime("%Y-%m-%dT%H:%M")  + df.iloc[-1].timestamp[16:] # Copy the seconds and TimeZone from response
+    compareEndTime = end.strftime("%Y-%m-%dT%H:%M")#  + df.iloc[-1].timestamp[16:] # Copy the seconds and TimeZone from response
     
     firstDate = df.iloc[0].tradingDay
     lastDate = df.iloc[-1].tradingDay
@@ -180,5 +180,7 @@ def getbc_intraday(symbol,  start, end=dt.datetime.today(), daType='minutes', in
     
     return meta, df
 
+if __name__ == '__main__':
+    pass
 
 # print(getApiKey())
