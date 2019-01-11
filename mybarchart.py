@@ -89,38 +89,42 @@ DEMO_PARAMS = {'apikey': APIKEY,
 
 
 # Not getting the current date-- maybe after the market closes?
-def getbc_intraday(symbol,  start, end=dt.datetime.today(), minutes=5,  daType='minutes'):
+def getbc_intraday(symbol,  start, end=None, minutes=5,  daType='minutes', showUrl=False):
     '''
     Note that getHistory will return previous day's prices until 15 minutes after the market closes. We will
-        generate a warning if our start or end date differ from the response 
+        generate a warning if our start or end date differ from the date of the response 
     :params symbol: The stock ticker
-    :parms start: A datetime object to indicate the begin time for the data
-    :params end: A datetime object to indicate the end time for the data
+    :params start: A datetime object or time string to indicate the begin time for the data
+    :params end: A datetime object or time string to indicate the end time for the data
     :params minutes: An int for the candle time, 5 minute, 15 minute etc
-    :params theDate: A date string formatted yyyymmdd. It will default to today
-    :returns: A tuple of (status as dictionary, data as a DataFrame ) This status is seperate from response.status_code
-    :raises ValueError: If start, end or daType are misformatted
-    :raises Exception is response.status_code from getHistory is not 200
+    :params daType: Possible values include  ['minutes', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly'] print(TYPE) (a module variable) for full list.
+    :return: A tuple of (status as dictionary, data as a DataFrame ) This status is seperate from request status_code
+    :raise: ValueError if response.status_code from getHistory is not 200 or if daType is not recognized.
     '''
     request_url = BASE_URL
-    
-    if not isinstance(start, dt.datetime) or not isinstance(end, dt.datetime):
-        print("start", type(start))
-        print("end", type(end))
-        raise ValueError("start and end must be datetime objects")
+
+    if not end:
+        tdy = dt.datetime.today()
+        end = dt.datetime(tdy.year, tdy.month, tdy.day, 17, 0)
+    if not start:
+        tdy = dt.datetime.today()
+        start = dt.datetime(tdy.year, tdy.month, tdy.day, 6, 0)
+    end = pd.to_datetime(end)    
+    start = pd.to_datetime(start)    
+        
  
     if daType not in TYPE:
         raise ValueError(f"daType must be one of {TYPE}")
         
-    s = start.strftime("%Y-%m-%d %H:%M")
-    e = end.strftime("%Y-%m-%d %H:%M")
+    # s = start.strftime("%Y-%m-%d %H:%M")
+    # e = end.strftime("%Y-%m-%d %H:%M")
     
     params={}
     params['apikey'] = APIKEY
     params['symbol'] = symbol
     params['type'] = daType
     params['interval'] = minutes
-    params['startDate'] = s
+    params['startDate'] = start
 #     if end:
 #         params['endDate'] = end
     params['order'] = 'asc'
@@ -131,56 +135,65 @@ def getbc_intraday(symbol,  start, end=dt.datetime.today(), minutes=5,  daType='
     params['jerq'] = 'true'
         
     response = requests.get(request_url,params=params)
-    
-    print(response.url)
+    if showUrl:
+        print(response.url)
 
     if response.status_code != 200:
         raise Exception(f"{response.status_code}: {response.content.decode('utf-8')}")
     result = response.json()
+    if not result['results']:
+        print('WARNING: Failed to retrieve any data. Barchart sends the following greeting:')
+        print(result['status'])
+        return result['status'], None
     
     keys = list(result.keys())
     meta = result[keys[0]]
-    tsj = result[keys[1]]
+    JSONTimeSeries = result[keys[1]]
+    df = pd.DataFrame(JSONTimeSeries)
+    df.set_index(df.timestamp, inplace=True)
+    df.index.rename('date', inplace=True)
 
-    df = pd.DataFrame(tsj)
-    
-    # Comparing and trimming the end  using strings in barchart's date and timestamp format strings
-    compareStartDate = dt.datetime(start.year, start.month, start.day).strftime("%Y-%m-%d")
-    compareEndDate = dt.datetime(end.year, end.month, end.day).strftime("%Y-%m-%d")
-    compareEndTime = end.strftime("%Y-%m-%dT%H:%M")#  + df.iloc[-1].timestamp[16:] # Copy the seconds and TimeZone from response
-    
-    firstDate = df.iloc[0].tradingDay
+    # HACKALERT hacky code alert Retrieve the tz hour and minutes  from the funky timestamp
+    # Subtradct Timedelta from to_datetime (Amazed the Series thing works like a matrix, written like a straight expression)
+    hour= df.index[0][20:-3]
+    minutes = df.index[0][23:]
+    minutes = int(minutes)
+    hour=int(hour)
+    seconds = minutes*60
+    df.index = pd.to_datetime(df.index, utc=False) - pd.Timedelta(hours=5, seconds=seconds)
+
+    firstTime = df.index[0]
     lastDate = df.iloc[-1].tradingDay
-    lastTime = df.iloc[-1].timestamp
-    
-    # These warnings remain dumb and subtlely pass the blame for requesting a non-trading day.
-    if compareEndDate > lastDate:
+    lastTime = df.index[-1]
         
-        print("\nWARNING: Requested end date is not included in response. Did you request a weekend or holiday?")
-        print(f"Last timestamp: {lastDate}")
-        print(f"Requested end of data: {compareEndDate}\n")
-        
-    if compareStartDate < firstDate:
+    if start < firstTime:
         
         print("\nWARNING: Requested start date is not included in response. Did you request a weekend or holiday?")
-        print(f"First timestamp: {firstDate}")
-        print(f"Requested start of data: {compareStartDate}\n")
-
-#     print(f"compareDate: {compareDate}\ncompareTime: {compareTime}\nlastDate:    {lastDate}\nlastTime:    {lastTime}")
-    df.set_index(df.timestamp, inplace=True)
+        print(f"First timestamp: {firstTime}")
+        print(f"Requested start of data: {start}\n")
 
     # getHistory trims the start nicely. We will trim the end here if requested by the end parameter. 
-    # (I think the premium API does handle this. There is some mention of endDate parameter)
-    if compareEndTime < lastTime:
-        print("Supa Dupa. Filtering end time")
-        df = df.loc[df.index <= compareEndTime]
-    else:
-        print("Still SUPER")
+    # (I think the premium API does handle this. There is some mention of an endDate parameter)
+    if end < lastTime:
+        df = df.loc[df.index <= end]
     
-    
+    #Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[]
+    df = df[['open', 'high', 'low', 'close', 'volume']].copy(deep=True)
     return meta, df
 
 if __name__ == '__main__':
-    pass
 
+
+
+    # tdy = dt.datetime.today()
+    # start = dt.datetime(tdy.year, tdy.month, tdy.day, 7)
+    # end = dt.datetime(tdy.year, tdy.month, tdy.day, 15, 48)
+    start = '2019-01-09'
+    end = None
+    interval=1
+    symbol='AAPL'
+    x,bcdf = getbc_intraday(symbol, start=start, end=end, minutes=interval)
+    print(x)
+    print (bcdf.head(2))
+    print(bcdf.tail(2))
 # print(getApiKey())

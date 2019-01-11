@@ -1,7 +1,15 @@
 '''
-Alphavantage stuff using their own RESTful  API
-@author: Mike Petersens
+Alphavantage  stuff using their own intraday RESTful  API
+@author: Mike Petersen
 @creation_date:2018-12-11
+Calls the RESTapi for intraday. There is a limit on the free API of 5 calls per minute 
+    500 calls per day. But the data is good. The Premium option is rather pricey.
+        Free for 5/min  1 every 12 seconds.  Write a API chooser, maybe cache the data
+        $20 for 15/min  1 every 4 seconds (might be doable for 500 clients -- stick wi barchart for now)
+        $50 for 60/min
+        $100 for 120/min
+        $250 for 600/min
+        As of 1/9/19
 '''
 # pylint: disable = C0103
 # pylint: disable = C0301
@@ -29,7 +37,9 @@ def getkey():
 
 BASE_URL = 'https://www.alphavantage.co/query?'
 
-# Stock only here, FX and bit currency are available. Also, many other technical indicators
+# These module vars are just documentation. These are the params required for each function 
+# We are only using intraday stocks and we might use some of the studies eventually
+# FX and bit currency are available. Also, many other technical indicators
 # are provided beyond ma and vwap
 FUNCTION = {'intraday':  'TIME_SERIES_INTRADAY',
             'daily': 'TIME_SERIES_DAILY',
@@ -45,7 +55,6 @@ FUNCTION = {'intraday':  'TIME_SERIES_INTRADAY',
             'atr': 'ATR'
             }
 
-# The redundancy serves as documentation in code. These are the params required for each function
 PARAMS = {'intraday':  ['symbol', 'datatype', 'apikey', 'outputsize', 'interval'],
           'daily':  ['symbol', 'datatype', 'apikey', 'outputsize'],
           'dailyadj':  ['symbol', 'datatype', 'apikey', 'outputsize'],
@@ -75,38 +84,11 @@ def getapis():
 def getlimits():
     '''alphavantage limits on usage'''
     print()
-    print('Your api key is:', getKey('alphavantage')['key'])
+    # print('Your api key is:', getKey('alphavantage')['key'])
     print('Limits 5 calls per minute, 500 per day')
+    print("Intraday goes back 1 week (I think).")
+    print(__doc__)
 
-
-def pt(t, theDate=None):
-    '''
-    process_time
-    Verify the time formatting. Must be formatted as hh:mm
-    Example call pt('13:30')
-    :params:t: Time formatted as str hh:mm
-    :params:theDate: A datetime date object. Defaults to today
-    :return: A timestamp str yyyy-mm-dd hh:mm:ss
-    '''
-
-    d = theDate if theDate else dt.datetime.today()
-
-    if not isinstance(t, str) or d and not isinstance(d, dt.datetime) \
-                              or len(t) != 5 or t.find(":") != 2:
-        print(f"Invalid time or date: {d}, {t}.")
-        print("     Date must be datetime object. Time must be formatted HH:MM\n")
-        return None
-    try:
-        s = int(t[:2])
-        x = int(t[3:])
-        assert s < 25
-        assert x < 61
-
-    except ValueError:
-        print("Invalid time {}. Must be formatted string hh:mm".format(t))
-    except AssertionError:
-        print("Invalid time {}. Must be legitamte 24 hour time formatted hh:mm".format(t))
-    return '{0:04d}-{1:02d}-{2:02d} {3}'.format(d.year, d.month, d.day, t)
 
 
 def ni(i):
@@ -123,30 +105,32 @@ def ni(i):
                 'd': 'daily', 'w': 'weekly', 'm': 'monthly', 1: '1min', 5: '5min',
                 15: '15min', 30: '30min', 60: '60min'
                 }[i]
-    print(f"interval={i} is not supported by alphavantage")
-    return None
-
-
-# This is good enough for now. Maybe write a general method for all the alphavantage APIs.
-# Alternately do the minimum by implementing a daily method and a moving average method. 
+    print(f"interval={i} is not supported by alphavantage. Set to 1min candle default.")
+    return '1min'
 
 # Set the apikey in the module or class
 # Set datatype in the module or class but return pandas for all
 # set outputsize here, Could get compact if the request is less than 100 data points
-def getmav_intraday(symbol, start=None, end=None, minutes=None, theDate=None):
+def getmav_intraday(symbol, start, end, minutes=None, theDate=None):
     '''
     Limited to getting minute data intended to chart day trades
     :params symb: The stock ticker
-    :params start: A time string formatted hh:mm to indicate the begin time for the data
-    :params end: A time string formatted hh:mm to indicate the end time for the data
+    :params start: A date time string or datetime object to indicate the beginning time.
+    :params end: A datetime string or datetime object to indicate the end time.
     :params minutes: An int for the candle time, 5 minute, 15 minute etc
-    :params theDate: A date string formatted yyyymmdd. It will default to today
+    :params theDate: A date string or object. It will default to today
     :returns: A DataFrame of minute indexed by time with columns open, high, low, 
-         low, close, volume
+         low, close, volume and indexed by pd timestamp. If not specified, this 
+         will return a weeks data. For now, we will enforce start and end as
+         required parameters in order to require precision from user.
     '''
 
+    start = pd.to_datetime(start)
+    end = pd.to_datetime(end)
+
+
     minutes = ni(minutes)
-    minutes = minutes if minutes else '1min'
+
 
     params = {}
     params['function'] = FUNCTION['intraday']
@@ -156,11 +140,10 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, theDate=None):
     params['outputsize'] = 'full'
     params['datatype'] = DATATYPES[0]
     params['apikey'] = APIKEY
+
     request_url = f"{BASE_URL}"
-
     response = requests.get(request_url, params=params)
-
-    print(response.url)
+    # print(response.url)
 
     if response.status_code != 200:
         raise Exception(
@@ -171,48 +154,76 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, theDate=None):
 
     if 'Error Message' in keys:
         raise Exception(f"{result['Error Message']}")
+    
+        
 
-    # Don't know if this is guaranteed: either 'Error Message' above,
-    # or ['Meta Data', 'Time Series (1min)'] and the data (below):
-    # Look for an error over a few months of use (12/18)
+
+    # If we exceed the requests/min, we get a friendly html string sales pitch.
     metaj = result[keys[0]]
-    tsj = result[keys[1]]
+    if len(keys) < 2:
+        #This tells us we have exceeded the limit and gives the premium link. AARRGH. Yahoo come back
+        print(metaj)
+        return None
 
-    df = pd.DataFrame(tsj).T
+    dataJson = result[keys[1]]
 
-    start = pt(start, theDate)# if start else start
-    end = pt(end, theDate) if end else end
+    df = pd.DataFrame(dataJson).T
+
+    df.index = pd.to_datetime(df.index)
+    df.index[0]
 
     if df.index[0] > df.index[-1]:
         df.sort_index(inplace=True)
 
-    if start > df.index[0]:
+    if end < df.index[0] :
+        print('WARNING: You have requested data that is unavailable:')
+        print(f'Your end date ({end}) is before the earliest first date ({df.index[0]}).')
+        return None
+
+    if start and start > df.index[0]:
         df = df[df.index >= start]
-    if end < df.index[-1]:
+
+
+    if end and  end < df.index[-1]:
         df = df[df.index <= end]
+
 
     df.rename(columns={'1. open': 'open',
                        '2. high': 'high',
                        '3. low': 'low',
                        '4. close': 'close',
                        '5. volume': 'volume'}, inplace=True)
+
+    # We got strings, probably because we had to invert the JSON data after creating a DataFrame
+    # TODO Find out how to invert the data in JSON before creating the DataFrame
+    df.open = pd.to_numeric(df.open)
+    df.high = pd.to_numeric(df.high)
+    df.low = pd.to_numeric(df.low)
+    df.close = pd.to_numeric(df.close)
+    df.volume = pd.to_numeric(df.volume)
+
+
     return df
 
 
 
+#TODO write getLastWeekday()
 
-# if __name__ == '__main__':
+if __name__ == '__main__':
+    df = getmav_intraday('SQ')
 #     print()
 #     print('Your api key is:', getkey()['key'])
 #     print('Here is a restful api:', EXAMPLES['api1'])
 #     print('docs at:', EXAMPLES['web_site'])
 #     print('Limits 5 calls per minute, 500 per day\n\n')
 
-start = "10:30"
-end = "16:00"
-theDate = dt.datetime(2019, 1, 3)
+# symbol='SQ'
+# start = "20190109 10:30"
+# end = "20190109 15:00"
+# minutes=None
+# theDate=None
+# # theDate = dt.datetime(2019, 1, 3)
 
-df = getmav_intraday("TEAM", start, end, minutes=60, theDate=theDate)
-print(df)
-print(APIKEY)
-getlimits()
+# df = getmav_intraday(symbol, start, end, minutes=minutes, theDate=theDate)
+# print (df.head())
+# print(df.tail())

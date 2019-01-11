@@ -86,14 +86,18 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, theDate=None):
 BASE_URL = 'https://api.iextrading.com/1.0'
 
 
-def get_historical_chart(symb, start=None, end=None):
-    '''Gets daily information
-    :parms:symbo: The stock ticker
-    :params:start: Starting Date. A Datetime object
-    :params:end: Ending date. A Datetime object
+def get_historical_chart(symb, start=None, end=None, showUrl=False, filter=True):
     '''
-    now = dt.datetime.today()
-
+    Gets daily information from stock ticker symb. 
+    :parmas symb: The stock ticker
+    :params:start: Starting Date time. A Datetime object or string.
+    :params:end: Ending date time. A Datetime object or string.
+    :params filter: Return only date ohlcv -whic is the default for this endpoint anyway
+    :return: A DataFrame with an index of date->timestamp and numpy.float values on ohlcv 
+    '''
+    # now = dt.datetime.today()
+    
+    # This should be transparent for the user. We will calculate based on start and end
     rng_d = {'5y': 60, '2y': 24, '1y': 12,
              '6m': 6, '3m': 3, '1m': 1}
 
@@ -104,7 +108,9 @@ def get_historical_chart(symb, start=None, end=None):
     rng = '5y'
     # months = 60
     if start:
-        # This will round up to get more data when its close to a limit
+        # This will round up to get an extra month (or less) when we are close to the 5 year limit
+        now = pd.to_datetime(dt.datetime.today())
+        start = pd.to_datetime(start)
         reqmonths = (((now - start).days)/30) + 1
         if reqmonths > 60:
             print('You have requested data beginning {}'.format(
@@ -115,30 +121,44 @@ def get_historical_chart(symb, start=None, end=None):
                 rng = key
             else:
                 break
-    print(rng, start)
-    params['filter'] = 'date,minute,open,high,low,close,average,volume'
+    if filter:
+        params['filter'] = 'date,minute,open,high,low,close,average,volume'
 
     request_url = f"{BASE_URL}/stock/{symb}/{url}/{rng}"
-    print(request_url)
 
     response = requests.get(request_url, params=params)
     if response.status_code != 200:
         raise Exception(
             f"{response.status_code}: {response.content.decode('utf-8')}")
-    print(response.url)
+    if showUrl:
+        print(response.url)
 
     result = response.json()
 
     df = pd.DataFrame(result)
 
+    df.open = pd.to_numeric(df.open)
+    df.high = pd.to_numeric(df.high)
+    df.low = pd.to_numeric(df.low)
+    df.close = pd.to_numeric(df.close)
+    df.volume = pd.to_numeric(df.volume)
+
     df.set_index('date', inplace=True)
+    df.index = pd.to_datetime(df.index)
     if start:
-        start = start.strftime("%Y-%m-%d")
+        start = pd.to_datetime(start)
+        # start = start.strftime("%Y-%m-%d")
         df = df.loc[df.index >= start]
     if end:
-        end = end.strftime("%Y-%m-%d")
+        end = pd.to_datetime(end)
+        # end = end.strftime("%Y-%m-%d")
         df = df.loc[df.index <= end]
-    return df
-# df = get_historical_chart('AAPL', dt.datetime(2013,6,6), dt.datetime(2018,10,4))
-# print (df.head(5))
+    return df[['open', 'high', 'low', 'close', 'volume' ]].copy(deep=True)
+
+
+# df = get_historical_chart('AAPL', dt.datetime(2017,6,6), dt.datetime(2018,10,4), showUrl=True)
+
+
+# print (type(df.index[0]))
+# print (type(df.close[0]))
 # print (df.tail(5))
