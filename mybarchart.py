@@ -1,7 +1,8 @@
 '''
-    Some barchart calls beginning with getHistory. Note that the docs show SOAP code to run this
-    in python but as of 12/29/18 the suds module (suds not suds-py3) does not work on my system.
-    I am goingto implement the straight RESTful free API using request
+Some barchart calls beginning (and ending now) with getHistory. Note that the docs show SOAP code to run this
+in python but as of 12/29/18 the suds module (suds not suds-py3) does not work on my system.
+I am goingto implement the straight RESTful free API using request
+
 @author: Mike Petersen
 @creation_data: 12/19/18
 '''
@@ -15,21 +16,17 @@ from stock.picklekey import getKey as getReg
 # pylint: disable = C0103
 APIKEY = getReg('barchart')['key']
 
-# barchart = {'key': '634dc287dbe9544d75765554c9238641',
-#             'web': 'https://www.barchart.com/ondemand/free-market-data-api/faq',
-#             'date': '12/29/18',
-#             'registered': 'lynnpete11@gmail.com'}
-
-
-# https://marketdata.websol.barchart.com/getHistory.json?apikey=634dc287dbe9544d75765554c9238641&symbol=AAPL&type=minutes&startDate=20181001&maxRecords=100&interval=5&order=asc&sessionFilter=EFK&splits=true&dividends=true&volume=sum&nearby=1&jerq=true
+# https://marketdata.websol.barchart.com/getHistory.json?apikey={APIKEY}&symbol=AAPL&type=minutes&startDate=20181001&maxRecords=100&interval=5&order=asc&sessionFilter=EFK&splits=true&dividends=true&volume=sum&nearby=1&jerq=true
 
 def getApiKey():
     return APIKEY
 
 
 def getLimits():
-    return ['Every user is able to make 400 getQuote queries and 150 getHistory queries per day.',
-            'https://www.barchart.com/ondemand/free-market-data-api/faq']
+    return '''Every user is able to make 400 getQuote queries and 150 getHistory queries per day.
+              One coud track a single stock for open hours updating once a minute.
+              Or one could track a single stock for one hour updating every 9 seconds.
+              https://www.barchart.com/ondemand/free-market-data-api/faq'''
 
 
 BASE_URL = f'https://marketdata.websol.barchart.com/getHistory.json?'
@@ -163,10 +160,12 @@ def getbc_intraday(symbol,  start, end=None, minutes=5,  daType='minutes', showU
     df.index = pd.to_datetime(df.index, utc=False) - pd.Timedelta(hours=5, seconds=seconds)
 
     firstTime = df.index[0]
+    firstDay = df.iloc[0].tradingDay
+    
     lastDate = df.iloc[-1].tradingDay
     lastTime = df.index[-1]
         
-    if start < firstTime:
+    if start.date() < firstTime.date():
         
         print("\nWARNING: Requested start date is not included in response. Did you request a weekend or holiday?")
         print(f"First timestamp: {firstTime}")
@@ -196,4 +195,15 @@ if __name__ == '__main__':
     print(x)
     print (bcdf.head(2))
     print(bcdf.tail(2))
+
+
+# graph_candlestick("AAPL", start=start, dtFormat='%m %d', st=s )
+#     import random
+# # tdy = dt.datetime.today()
+# start='2019-11-20'
+# r = random.randint(0, len(style.available))
+# s = style.available[r]
+# print(s)
+
+# classic, greyscale, seaborn-poster, bmh, dark_background
 # print(getApiKey())
