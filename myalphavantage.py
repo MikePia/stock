@@ -1,5 +1,5 @@
 '''
-Alphavantage  stuff using their own intraday RESTful  API
+Alphavantage  stuff using their own intraday RESTful  API. Have only implemented TIME_SERIES_INTRADAY. 
 @author: Mike Petersen
 @creation_date:2018-12-11
 Calls the RESTapi for intraday. There is a limit on the free API of 5 calls per minute 
@@ -81,12 +81,18 @@ def getapis():
     return[EXAMPLES['api1'], EXAMPLES['api2'], EXAMPLES['api3'], EXAMPLES['api4'], EXAMPLES['api5']]
 
 
-def getlimits():
+def getLimits():
     '''alphavantage limits on usage'''
     print()
     # print('Your api key is:', getKey('alphavantage')['key'])
-    print('Limits 5 calls per minute, 500 per day')
+    print('Limits 5 calls per minute, 500 per day. (Is it time to implement caching?')
+    print("They say these are realtime. Need to test it against ib api.")
     print("Intraday goes back 1 week (I think).")
+    print("Strangely, currently I find 1 min data goes 1 week")
+    print("5 min data goes back about 25 days")
+    print("15 and 40 min data goes to the beginning of last month or say 50 days")
+    print("60 minute goes back about 3 months")
+    print("There is no guarantee, I think maybe the 1 week is the only guarantee.")
     print(__doc__)
 
 
@@ -105,28 +111,39 @@ def ni(i):
                 'd': 'daily', 'w': 'weekly', 'm': 'monthly', 1: '1min', 5: '5min',
                 15: '15min', 30: '30min', 60: '60min'
                 }[i]
-    print(f"interval={i} is not supported by alphavantage. Set to 1min candle default.")
+    if isinstance(i, int):
+        if i < 5: return '1min'
+        elif i < 15: return '5min'
+        elif i < 30: return '15min'
+        elif i < 60: return '30min'
+        return '60min'
+    print(f"interval={i} is not supported by alphavantage. Setting to 1min candle.")
     return '1min'
 
+
 # Set the apikey in the module or class
-# Set datatype in the module or class but return pandas for all
-# set outputsize here, Could get compact if the request is less than 100 data points
-def getmav_intraday(symbol, start, end, minutes=None, theDate=None):
+# TODO Could increase the number of avalable free calls by caching the data. Don't ever call 
+# 5,15,30, or 60 min (at least for data in the last week) and use resample to get them. For 
+# charting, 500 calls would go a long way. It could translate to having all the data I need for 
+# 500 stocks. that might just cover all the stocks traded in a day by all BearBulls traders.
+# Combined with the other free APIS, and I would likely have enough data to cover the day. 
+# Just keep spedialized in minute charts for daily review.
+def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
     '''
     Limited to getting minute data intended to chart day trades
     :params symb: The stock ticker
     :params start: A date time string or datetime object to indicate the beginning time.
     :params end: A datetime string or datetime object to indicate the end time.
-    :params minutes: An int for the candle time, 5 minute, 15 minute etc
-    :params theDate: A date string or object. It will default to today
+    :params minutes: An int for the candle time, 5 minute, 15 minute etc, only specific intervals are recognized
+
     :returns: A DataFrame of minute indexed by time with columns open, high, low, 
          low, close, volume and indexed by pd timestamp. If not specified, this 
          will return a weeks data. For now, we will enforce start and end as
          required parameters in order to require precision from user.
     '''
 
-    start = pd.to_datetime(start)
-    end = pd.to_datetime(end)
+    start = pd.to_datetime(start) if start else None
+    end = pd.to_datetime(end) if end else None
 
 
     minutes = ni(minutes)
@@ -143,7 +160,8 @@ def getmav_intraday(symbol, start, end, minutes=None, theDate=None):
 
     request_url = f"{BASE_URL}"
     response = requests.get(request_url, params=params)
-    # print(response.url)
+    if showUrl:
+        print(response.url)
 
     if response.status_code != 200:
         raise Exception(
@@ -175,17 +193,26 @@ def getmav_intraday(symbol, start, end, minutes=None, theDate=None):
     if df.index[0] > df.index[-1]:
         df.sort_index(inplace=True)
 
-    if end < df.index[0] :
-        print('WARNING: You have requested data that is unavailable:')
-        print(f'Your end date ({end}) is before the earliest first date ({df.index[0]}).')
-        return None
+    if end:
+        if end < df.index[0] :
+            print('WARNING: You have requested data that is unavailable:')
+            print(f'Your end date ({end}) is before the earliest first date ({df.index[0]}).')
+            return None
 
-    if start and start > df.index[0]:
-        df = df[df.index >= start]
+    if start:
+        if start > df.index[0]:
+            df = df[df.index >= start]
+            if len(df) < 1:
+                print(f"\nWARNING: you have sliced off all the data with the start date {start}")
+                return metaj, pd.DataFrame()
 
 
-    if end and  end < df.index[-1]:
-        df = df[df.index <= end]
+    if end:
+        if end < df.index[-1]:
+            df = df[df.index <= end]
+            if len(df) < 1:
+                print(f"\nWARNING: you have sliced off all the data with the end date {end}")
+                return metaj, pd.DataFrame()
 
 
     df.rename(columns={'1. open': 'open',
@@ -203,14 +230,23 @@ def getmav_intraday(symbol, start, end, minutes=None, theDate=None):
     df.volume = pd.to_numeric(df.volume)
 
 
-    return df
+    return metaj, df
 
 
 
 #TODO write getLastWeekday()
 
 if __name__ == '__main__':
-    df = getmav_intraday('SQ')
+    # df = getmav_intraday('SQ')
+    # print(df.head())
+
+
+    start="2019-01-11 11:30"
+    end="2019-01-14 18:40"
+    d = dt.datetime(2018,12,20)
+    x, df = getmav_intraday("TEAM", start=start, end=end, minutes='60min')
+    print(df.head(2))
+    print(df.tail(2))
 #     print()
 #     print('Your api key is:', getkey()['key'])
 #     print('Here is a restful api:', EXAMPLES['api1'])

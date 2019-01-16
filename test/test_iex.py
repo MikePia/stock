@@ -6,8 +6,11 @@
 
 import datetime as dt
 import unittest
+import pandas as pd
 
 from stock import myiex as iex
+import inspect
+# from itertools import ifilter
 # pylint: disable = C0103
 # pylint: disable = R0914
 
@@ -20,17 +23,80 @@ def getPrevTuesWed(td):
     :params td: A Datetime object
     '''
     deltdays = 7
-    if td.weekday() > 2:
-        deltdays = deltdays + (td.weekday() - 2)
-    elif td.weekday() == 0:
-        deltdays = 12
+    if td.weekday() == 0:
+        deltdays = 5
+    elif td.weekday() < 3:
+        deltdays = 0
+    elif td.weekday() < 5:
+        deltdays = 2
+    else:
+        deltdays = 4
     before = td - dt.timedelta(deltdays)
     return before
-    # print(f"from {td.day} {td.strftime('%A')}: {before.day} {before.strftime('%A')} ")
 
 
 class TestMyiex(unittest.TestCase):
     '''Test functions in module myiex'''
+
+    def test_getiex_intraday(self):
+        now = dt.datetime.today()
+        tomorrow= now + dt.timedelta(1)
+        now=getPrevTuesWed(now)
+        beginDay = dt.datetime(now.year, now.month, now.day, 9,29)
+        endDay = dt.datetime(now.year, now.month, now.day, 16,1)
+        
+        dateArray = [(None, None),
+                     (beginDay, None),
+                     (None, endDay),
+                     (beginDay, endDay)]
+        for start, end in dateArray:
+            df = iex.getiex_intraday('SQ', start=start, end=end)
+            self.assertGreater(len(df), 0)
+
+
+        # These dates should return no results
+        dateArray = [(None, beginDay),
+                     (endDay, None),
+                     (tomorrow, None )]
+        for start, end in dateArray:
+            df = iex.getiex_intraday('SQ', start=start, end=end)
+            self.assertEqual(len(df), 0)
+
+        # Test date formats
+        startstamp = pd.Timestamp(beginDay)
+        endstamp = pd.Timestamp(endDay)
+        startstring = beginDay.strftime("%Y%m%d %H%M")
+        endstring = endDay.strftime("%Y-%m-%d %H:%M")
+        dateArray = [(startstamp, endstamp),
+                     (startstring, endstring),
+                     (startstamp, endstring),
+                     (startstring, endstamp),
+                     (startstamp, endstring)]
+
+        for start, end in dateArray:
+            df = iex.getiex_intraday('SQ', start=start, end=end)
+            self.assertGreater(len(df), 0)
+
+    def test_getiex_intraday_interval(self):
+        '''Test the candle intvarls by subtracting strings processed into times'''
+        intervals = [2, 6, 60, 15]
+        for interval in intervals:
+            df = iex.getiex_intraday("SQ", minutes=interval)
+
+            # HACK ALERT -- there has got to be a better way to find the differnce in minutes
+            # of a time string ---
+            min0 = df.index[0].split(":")
+            min1 = df.index[1].split(":")
+
+            (hour0, minute0) = (int(min0[0]), int(min0[1]))
+            (hour1, minute1) = (int(min1[0]), int(min1[1]))
+
+            t0 = dt.datetime(1111, 11, 11, hour0, minute0)
+            t1 = dt.datetime(1111, 11, 11, hour1, minute1)
+
+            delt = t1-t0
+            interval_actual = delt.seconds//60
+            self.assertEqual(interval_actual, interval)
 
     def test_get_trading_chart(self):
         '''
@@ -46,7 +112,7 @@ class TestMyiex(unittest.TestCase):
     def test_get_trading_chart_dates(self):
         '''Test that it correctly retrieves the right times and date as requested'''
         b = getPrevTuesWed(dt.datetime.today())
-        before = f"{b.year}{b.month}{b.day}"
+        before = b.strftime("%Y%m%d")
         start = "09:32"
         end = "15:59"
         df = iex.get_trading_chart("SQ", start, end, theDate=before)
@@ -77,42 +143,93 @@ class TestMyiex(unittest.TestCase):
             interval_actual = delt.seconds//60
             self.assertEqual(interval_actual, interval)
 
+    def test_get_trading_chart_filt(self):
+        df = iex.get_trading_chart("SQ", filt='default')
+        self.assertEqual(len(df.columns), 5)
+        self.assertTrue('open' in df.columns)
+        self.assertTrue('high' in df.columns)
+        self.assertTrue('low' in df.columns)
+        self.assertTrue('close' in df.columns)
+        self.assertTrue('volume' in df.columns)
+
+        df = iex.get_trading_chart("SQ", filt='open, marketOpen, average')
+        self.assertEqual(len(df.columns), 3)
+        self.assertTrue('open' in df.columns)
+        self.assertTrue('marketOpen' in df.columns)
+        self.assertTrue('average' in df.columns)
+
+        df = iex.get_trading_chart("SQ")
+        self.assertTrue('changeOverTime' in df.columns)
+
     def test_get_historical_chart(self):
         '''Test we got about 5 years of data within about 1 week leeway'''
+        '''Test we got about 5 years of data within about 1 week leeway'''
         df = iex.get_historical_chart("AAPL")
-        today = dt.datetime.today()
-        d = df.index[0].split("-")
-        before = dt.datetime(int(d[0]), int(d[1]), int(d[2]))
-        delt = today-before
 
-        # Assert we got data within about a week more or less of 5 years
-        self.assertGreater(delt.days, 1819)
-        self.assertLess(delt.days, 1832)
+        today = pd.Timestamp.today()
+        firstd = df.index[0]
+        delt = today - firstd
 
-        d = df.index[-1].split("-")
-        recent = dt.datetime(int(d[0]), int(d[1]), int(d[2]))
-        delt = today-recent
+        self.assertGreater(delt.days, 1819, f'Should have retrieved 5 years of data. Received {delt.days} days')
+        self.assertLess(delt.days, 1832, f'Should have retrieved 5 years of data. Received {delt.days} days')
 
-        # Assert we got data at least to 3 days ago (account for weekends etc)
-        self.assertLess(delt.days, 3)
+        lastd = df.index[-1]
+        delt = today-lastd
+
+        # Assert we got data at least to 4 days ago (account for 4 day weekends etc)
+        self.assertLess(delt.days, 4, f'Most recent date ({lastd}) was more than 4 days ago')
 
     def test_get_historical_chart_start(self):
         '''Checking the correct start and end dates given open market days for start and end'''
-        dateArray = [(dt.datetime(2017, 3, 3), dt.datetime(2017, 11, 3)),
-                     (dt.datetime(2016, 12, 27), dt.datetime(2017, 2, 26))]
+        #Test dates are all days the market was open
+        dateArray = [(dt.datetime(2017, 3, 3), dt.datetime(2017, 11, 10)),
+                    (dt.datetime(2016, 12, 27), dt.datetime(2017, 2, 3)),
+                    (('2018-06-08 00:00:00'), ('2019-01-10 00:00:00'))]
 
         for start, end in dateArray:
             df = iex.get_historical_chart("TEAM", start, end)
+            start= pd.Timestamp(start)
+            end = pd.Timestamp(end)
 
-            s = df.index[0].split("-")
-            e = df.index[-1].split("-")
+            actualStart = df.index[0]
+            actualEnd = df.index[-1]
+            
+            self.assertEqual(actualStart, start, f"Was the market open on {start}?")
+            self.assertEqual(actualEnd, end, f"Was the market open on {end}?")
 
-            (y, m, d) = (int(s[0]), int(s[1]), int(s[2]))
-            (y1, m1, d1) = (int(e[0]), int(e[1]), int(e[2]))
+        #Test dates are all days the market was closed
+        dateArray = [(dt.datetime(2017, 3, 5), dt.datetime(2017, 11, 5)),
+                    (dt.datetime(2016, 12, 24), dt.datetime(2017, 2, 5)),
+                    (('2018-06-10 00:00:00'), ('2019-01-13 00:00:00'))]
 
-            actualStart = dt.datetime(y, m, d)
-            actualEnd = dt.datetime(y1, m1, d1)
-            msg0 = f"Was the market open on {start}?"
-            msg1 = f"Was the market open on {end}?"
-            self.assertEqual(actualStart, start, msg0)
-            self.assertEqual(actualEnd, end, msg1)
+        for start, end in dateArray:
+            df = iex.get_historical_chart("TEAM", start, end)
+            start= pd.Timestamp(start)
+            end = pd.Timestamp(end)
+
+            actualStart = df.index[0]
+            actualEnd = df.index[-1]
+
+            self.assertNotEqual(actualStart, start)
+            self.assertNotEqual(actualEnd, end)
+
+def main():
+    '''test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest discovery'''
+    f = TestMyiex()
+    for name in dir(f):
+        if name.startswith('test'):
+            attr = getattr(f, name)
+            if isinstance(attr, type(f.test_get_trading_chart)):
+                attr()
+
+def notmain():
+    f = TestMyiex()
+    # f.test_get_trading_chart_filt()
+    # f.test_getiex_intraday()
+    f.test_getiex_intraday_interval()
+
+if __name__ == '__main__':
+    main()
+    # notmain()
+
+    

@@ -88,25 +88,16 @@ def graph_candlestick(symbol, start=None, end=None, dtFormat="%b %d", st = 'ggpl
     ax1.xaxis.set_major_formatter(mdates.DateFormatter(dtFormat))
     ax1.xaxis.set_major_locator(mticker.MaxNLocator(10))
     
-    #==================================================================================================
-    #================================= new STUFF =======================================================
-    #==================================================================================================
     # fdict={'family': 'serif', 'color': 'darkred', 'size':15}
     # ax1.text(df_ohlc.date[20], 340,'Animated Parrot Department', fontdict=fdict)
     ax1.text(df_ohlc.date[20], df_ohlc.low.min(),'Animated Parrot Department',  
              fontdict = {'fontname': matchFont('onyx'), 'size': 32, 'color': '161616'})
-    
-    #==================================================================================================
-    #================================= END STUFF =======================================================
-    #==================================================================================================
-    
     
     plt.xlabel('I am an xlabel. what are you?')
     plt.ylabel('Prices over here' )
     plt.title(f'{symbol} Daily chart\nWith empty weekends and holidays!')
 #     plt.legend()
 
-    #Required by de as his 'Feb 2018' didn't fit
     # plt.subplots_adjust(left=0.09, bottom = 0.1, right = 0.94, top = 0.95, wspace = 0.2, hspace=0)
     plt.savefig('figure_1.png')
 

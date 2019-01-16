@@ -86,12 +86,14 @@ DEMO_PARAMS = {'apikey': APIKEY,
 
 
 # Not getting the current date-- maybe after the market closes?
-def getbc_intraday(symbol,  start, end=None, minutes=5,  daType='minutes', showUrl=False):
+def getbc_intraday(symbol,  start=None, end=None, minutes=5,  daType='minutes', showUrl=False):
     '''
     Note that getHistory will return previous day's prices until 15 minutes after the market closes. We will
-        generate a warning if our start or end date differ from the date of the response 
-    :params symbol: The stock ticker
-    :params start: A datetime object or time string to indicate the begin time for the data
+        generate a warning if our start or end date differ from the date of the response. Given todays date at 
+        14:00, it will retrive the previous business days stuff. We don't trim the beginning because barchart 
+        does a good job of that
+    :params start: A datetime object or time string to indicate the begin time for the data. During trading hours,
+            a start for today is ignored by barchart and it retrieves the previous biz day.
     :params end: A datetime object or time string to indicate the end time for the data
     :params minutes: An int for the candle time, 5 minute, 15 minute etc
     :params daType: Possible values include  ['minutes', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly'] print(TYPE) (a module variable) for full list.
@@ -137,11 +139,15 @@ def getbc_intraday(symbol,  start, end=None, minutes=5,  daType='minutes', showU
 
     if response.status_code != 200:
         raise Exception(f"{response.status_code}: {response.content.decode('utf-8')}")
+    if response.text and isinstance(response.text, str) and response.text.startswith('You have reached'):
+        print('WARNING: API max queries:\n', response.text)
+        meta = {'code': 666, 'message': response.text}
+        return meta, pd.DataFrame()
     result = response.json()
     if not result['results']:
         print('WARNING: Failed to retrieve any data. Barchart sends the following greeting:')
         print(result['status'])
-        return result['status'], None
+        return result['status'], pd.DataFrame()
     
     keys = list(result.keys())
     meta = result[keys[0]]
@@ -165,36 +171,55 @@ def getbc_intraday(symbol,  start, end=None, minutes=5,  daType='minutes', showU
     lastDate = df.iloc[-1].tradingDay
     lastTime = df.index[-1]
         
+    msg=''
     if start.date() < firstTime.date():
-        
-        print("\nWARNING: Requested start date is not included in response. Did you request a weekend or holiday?")
-        print(f"First timestamp: {firstTime}")
-        print(f"Requested start of data: {start}\n")
+        msg="\nWARNING: Requested start date is not included in response. Did you request a weekend or holiday?"
+        msg = msg + f"First timestamp: {firstTime}\n"
+        msg = msg + f"Requested start of data: {start}\n"
+        print(msg)
+
+    elif start.date() > firstTime.date():
+        msg="\nWARNING: Requested start date is after the barchart response. If the market is still open?\n"
+        msg = msg + "Barchart will retrieve today after the close and not before.\n"
+        msg = msg + f"First timestamp: {firstTime}\n"
+        msg = msg + f"Requested start of data: {start}\n"
+        print(msg)
+
 
     # getHistory trims the start nicely. We will trim the end here if requested by the end parameter. 
     # (I think the premium API does handle this. There is some mention of an endDate parameter)
     if end < lastTime:
         df = df.loc[df.index <= end]
+        # If we just sliced off all our data. Set warning message
+        msg = msg + '\nWARNING: all data has been removed.'
+        msg = msg+ f'\nThe Requested end ({end}) is less than the actual end ({lastTime}).'
     
     #Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[]
     df = df[['open', 'high', 'low', 'close', 'volume']].copy(deep=True)
+    if msg:
+        meta['code2'] = 199
+        meta['message'] = meta['message'] + msg
     return meta, df
 
-if __name__ == '__main__':
-
-
-
+def main():
     # tdy = dt.datetime.today()
     # start = dt.datetime(tdy.year, tdy.month, tdy.day, 7)
     # end = dt.datetime(tdy.year, tdy.month, tdy.day, 15, 48)
     start = '2019-01-09'
-    end = None
+    end = '2019-01-14'
     interval=1
     symbol='AAPL'
     x,bcdf = getbc_intraday(symbol, start=start, end=end, minutes=interval)
     print(x)
     print (bcdf.head(2))
     print(bcdf.tail(2))
+
+if __name__ == '__main__':
+    main()
+
+
+
+    
 
 
 # graph_candlestick("AAPL", start=start, dtFormat='%m %d', st=s )
