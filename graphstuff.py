@@ -87,8 +87,16 @@ def graph_candlestick(symbol, start=None, end=None, dtFormat="%b %d", st = 'ggpl
         label.set_rotation(-45)
     ax1.xaxis.set_major_formatter(mdates.DateFormatter(dtFormat))
     ax1.xaxis.set_major_locator(mticker.MaxNLocator(10))
+
+    # print("=======", list(df_ohlc['close'])[-1])
     
-    # fdict={'family': 'serif', 'color': 'darkred', 'size':15}
+    bbox_props =  dict(boxstyle='round', fc='w', ec='k', lw=1)
+    ax1.annotate(f'{list(df_ohlc.close)[-1]}', 
+                 (list(df_ohlc.date)[-1], list(df_ohlc.close)[-1]),
+                 xytext=(list(df_ohlc.date)[-1] + .5/24, list(df_ohlc.close)[-1]),
+                 bbox=bbox_props) #, textcoords= 'axes fraction',arrowprops=dict(color='grey'))
+    
+    fdict={'family': 'serif', 'color': 'darkred', 'size':15}
     # ax1.text(df_ohlc.date[20], 340,'Animated Parrot Department', fontdict=fdict)
     ax1.text(df_ohlc.date[20], df_ohlc.low.min(),'Animated Parrot Department',  
              fontdict = {'fontname': matchFont('onyx'), 'size': 32, 'color': '161616'})
@@ -98,7 +106,7 @@ def graph_candlestick(symbol, start=None, end=None, dtFormat="%b %d", st = 'ggpl
     plt.title(f'{symbol} Daily chart\nWith empty weekends and holidays!')
 #     plt.legend()
 
-    # plt.subplots_adjust(left=0.09, bottom = 0.1, right = 0.94, top = 0.95, wspace = 0.2, hspace=0)
+    plt.subplots_adjust(left=0.08, bottom = 0.04, right = 0.86, top = 0.84, wspace = 0.2, hspace=0.2)
     plt.savefig('figure_1.png')
 
     # fig=plt.gcf()
@@ -109,7 +117,7 @@ def localRun():
     '''Just running through the paces'''
     import random
     # tdy = dt.datetime.today()
-    start='2019-01-11'
+    start='2019-01-16'
     r = random.randint(0, len(style.available)-1)
     s = style.available[r]
     print(s)
