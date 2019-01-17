@@ -214,9 +214,8 @@ class TestApp(TestWrapper, TestClient):
             x.set_index('date', inplace=True)
             # print("About to print the Da
             return x
-        except Exception as ex:
-            print ("Request came back empty", ex.__class__.__name__, ex)
-            sys.quit()
+        except queue.Empty as ex:
+            print("Request came back empty", ex.__class__.__name__, ex)
 
 
 
