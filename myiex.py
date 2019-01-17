@@ -93,23 +93,22 @@ def getiex_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
 
     if startday != endday:
         raise ValueError('start and end parameters must be on the same day for IEX intraday API')
-    df = get_trading_chart(symbol, start=starttime, end=endtime, minutes=minutes, theDate=startday, filt='default', showUrl=showUrl)
+    df = get_trading_chart(symbol, start=starttime, end=endtime, minutes=minutes, showUrl=showUrl)
     if not df.empty:
         # Put then in the expected order
         df = df[['open', 'high', 'low', 'close', 'volume']].copy(deep=True)
     return df
 
 # TODO combine these two methods on this page
-def get_trading_chart(symb, start=None, end=None, minutes=None, theDate=None, filt=False, showUrl=False):
+def get_trading_chart(symb, start=None, end=None, minutes=None, filt=False, showUrl=False):
     '''
     Limited to getting minute data intended to chart day trades. The API has 
     stock/{symb}/1d/date/theDate     The '1d' determines some behavior. Minute charts
         are only available for one day and must provide 'date/yyyymmdd' to the url
     :params symb: The stock ticker
-    :parms start: A time string formatted hh:mm to indicate the begin time for the data
-    :params end: A time string formatted hh:mm to indicate the end time for the data
+    :parms start: A datetime object or time string indicating the beginning of the requested data
+    :params end:  A datetime object or time string indicating the beginning of the requested data
     :params minutes: An int for the candle time, 5 minute, 15 minute etc. Any int is accepted.
-    :params theDate: A datetime object or a time string. It will default to today
     :params filt: Represents the columns to include. With no entry, all columns. The param filt=default
         will return ohlcv with minutes as index. A comma seperated list will retrive those columns 
     :returns: A DataFrame from within a single day indexed by minutes.
@@ -119,8 +118,11 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, theDate=None, fi
     rng = "1d"
 
     # Validate start and end time string will raise ValueError on bad time string
-    validateTimeString(start, end)    
-
+    # validateTimeString(start, end)
+        
+    start = pd.Timestamp(start) if start else None
+    end = pd.Timestamp(end) if end else None
+    theDate = start.strftime("%Y%m%d") if start else None
     if theDate:
         ts = pd.Timestamp(theDate)
         now=pd.Timestamp.today()
@@ -129,7 +131,6 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, theDate=None, fi
             print('\nWARNING: you have requested a day in the future. Call cancelled.\n')
             return pd.DataFrame()
 
-        theDate = ts.strftime("%Y%m%d")
         rng = f"date/{theDate}"
     params = {}
     if minutes:
@@ -137,7 +138,7 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, theDate=None, fi
         params['chartInterval'] = minutes
     if filt:
         if filt == 'default':
-            params['filter'] = 'minute,open,high,low,close, volume'
+            params['filter'] = 'date,minute,open,high,low,close, volume'
         else:
             # We need the minute field for the index
             if filt.find('minute') < 0:
@@ -161,7 +162,9 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, theDate=None, fi
 
     df = pd.DataFrame(result)
 
-    df.set_index('minute', inplace=True)
+    df['newcolumn'] = df['date'] + ' ' + df['minute']
+    df.set_index('newcolumn', inplace=True)
+    df.index = pd.to_datetime(df.index)
 
     df = df.loc[df.index >= start] if start else df
     df = df.loc[df.index <= end] if end else df
@@ -246,25 +249,27 @@ def get_historical_chart(symb, start=None, end=None, showUrl=False, filter=False
     return df #[['open', 'high', 'low', 'close', 'volume' ]].copy(deep=True)
 
 
-# df = get_historical_chart('AAPL', dt.datetime(2017,6,6), dt.datetime(2018,10,4), showUrl=True)
+def main():
+    # df = get_historical_chart('AAPL', dt.datetime(2017,6,6), dt.datetime(2018,10,4), showUrl=True)
+    # print (type(df.index[0]))
+    # print (type(df.close[0]))
+    # print (df.tail(5))
 
 
-# print (type(df.index[0]))
-# print (type(df.close[0]))
-# print (df.tail(5))
+    start='2018-12-31 11:30'
+    end='2018-12-31 16:05'
+    df= getiex_intraday('AAPL', start, end, minutes=1, showUrl=True)
+    print(df)
 
+    # start="11:30"
+    # end="16:05"
+    # minutes=1
+    # theDate="20181231"
 
-# start='2019-12-31 11:30'
-# end='2019-12-31 16:05'
-# df= getiex_intraday('AAPL', start, end, minutes=1, showUrl=True)
-# print(df)
+    # iexdf=get_trading_chart("AAPL", start, end, minutes,showUrl=True)
 
-# start="11:30"
-# end="16:05"
-# minutes=1
-# theDate="20181231"
-
-# iexdf=get_trading_chart("AAPL", start, end, minutes,showUrl=True)
-
-# df = iex.get_historical_chart("AAPL")
+    # df = iex.get_historical_chart("AAPL")
 # print (iexdf)
+
+if __name__ == "__main__":
+    main()
