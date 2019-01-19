@@ -59,11 +59,11 @@ class FinPlot(object):
             retList = (self.matchFont(default))
         return retList
 
-    def apiChooser(self, api='bc'):
+    def apiChooser(self):
         '''
         Get a data method
         '''
-        self.api = api
+        # self.api = api
         if self.api == 'bc':
             # retrieves previous biz day until about 16:30
             return bc.getbc_intraday

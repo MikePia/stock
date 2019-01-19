@@ -6,6 +6,7 @@
 import datetime as dt
 import unittest
 
+import numpy as np
 from stock.graphstuff import FinPlot
 # pylint: disable = C0103
 
@@ -32,7 +33,7 @@ class TestGraphstuff(unittest.TestCase):
         Test the method FinPlot.apiChooser for the same interface in each api
         '''
         fp = FinPlot()
-        fp.api = 'bc'
+        fp.api = 'iex'
         biz = getLastWorkDay()
         start = dt.datetime(biz.year, biz.month, biz.day, 12, 30)
         end = dt.datetime(biz.year, biz.month, biz.day, 16, 1)
@@ -40,7 +41,12 @@ class TestGraphstuff(unittest.TestCase):
         self.assertEqual(len(df.columns), 5)
         cols = ['open', 'high', 'low', 'close', 'volume']
         for col in cols:
+            # print(col, type(df[col][0]), isinstance(df[col][0], (np.float, np.integer)))
             self.assertTrue(col in df.columns)
+            self.assertTrue(isinstance(df[col][0], (np.float, np.integer)))
+        
+        self.assertTrue(isinstance(df.index[0], dt.datetime))
+        
         print(df.columns)
         print(df.dtypes)
         print(type(df.index[0]))
@@ -53,9 +59,9 @@ def notmain():
     '''
     Local run stuff for dev
     '''
-    # t = TestGraphstuff()
-    # t.test_apiChooser()
-    print(getLastWorkDay(dt.datetime(2019, 1, 22)))
+    t = TestGraphstuff()
+    t.test_apiChooser()
+    # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
 
 
 

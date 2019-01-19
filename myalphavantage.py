@@ -20,7 +20,6 @@ import pandas as pd
 from stock.picklekey import getKey
 # import pickle
 
-# Most of these module variables are just documentation for dev reference. APIKEY is for real
 BASE_URL = 'https://www.alphavantage.co/query?'
 EXAMPLES = {
     'api1': 'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=MSFT&interval=5min&apikey=VPQRQR8VUQ8PFX5B',
