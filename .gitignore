@@ -9,3 +9,4 @@ bc_soap*
 __pycache__
 .project
 .pydevproject
+out/

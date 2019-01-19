@@ -9,7 +9,7 @@ import unittest
 import pandas as pd
 
 from stock import myiex as iex
-import inspect
+# import inspect
 # from itertools import ifilter
 # pylint: disable = C0103
 # pylint: disable = R0914
@@ -47,10 +47,9 @@ class TestMyiex(unittest.TestCase):
         
         dateArray = [(None, None),
                      (beginDay, None),
-                     (None, endDay),
                      (beginDay, endDay)]
         for start, end in dateArray:
-            df = iex.getiex_intraday('SQ', start=start, end=end)
+            x, df = iex.getiex_intraday('SQ', start=start, end=end)
             self.assertGreater(len(df), 0)
 
 
@@ -59,7 +58,7 @@ class TestMyiex(unittest.TestCase):
                      (endDay, None),
                      (tomorrow, None )]
         for start, end in dateArray:
-            df = iex.getiex_intraday('SQ', start=start, end=end)
+            x, df = iex.getiex_intraday('SQ', start=start, end=end)
             self.assertEqual(len(df), 0)
 
         # Test date formats
@@ -81,20 +80,14 @@ class TestMyiex(unittest.TestCase):
         '''Test the candle intvarls by subtracting strings processed into times'''
         intervals = [2, 6, 60, 15]
         for interval in intervals:
-            df = iex.getiex_intraday("SQ", minutes=interval)
+            x, df = iex.getiex_intraday("SQ", minutes=interval)
 
             # HACK ALERT -- there has got to be a better way to find the differnce in minutes
             # of a time string ---
-            min0 = df.index[0].split(":")
-            min1 = df.index[1].split(":")
+            min0 = df.index[0]
+            min1 = df.index[1]
 
-            (hour0, minute0) = (int(min0[0]), int(min0[1]))
-            (hour1, minute1) = (int(min1[0]), int(min1[1]))
-
-            t0 = dt.datetime(1111, 11, 11, hour0, minute0)
-            t1 = dt.datetime(1111, 11, 11, hour1, minute1)
-
-            delt = t1-t0
+            delt = min1 - min0
             interval_actual = delt.seconds//60
             self.assertEqual(interval_actual, interval)
 
@@ -110,15 +103,20 @@ class TestMyiex(unittest.TestCase):
         self.assertRaises(Exception, iex.get_trading_chart, "SNOORK")
 
     def test_get_trading_chart_dates(self):
-        '''Test that it correctly retrieves the right times and date as requested'''
+        '''Test that it correctly retrieves the right times and date as requested. Also the index should be a Timestamp'''
         b = getPrevTuesWed(dt.datetime.today())
-        before = b.strftime("%Y%m%d")
-        start = "09:32"
-        end = "15:59"
-        df = iex.get_trading_chart("SQ", start, end, theDate=before)
-        self.assertEqual(df.iloc[0]['date'], before)
-        msg1 = f"Was the market open on {before} at {start}"
-        msg2 = f"Was the market open on {before} at {end}"
+        start = b.strftime("%Y%m%d 09:32")
+        # start = "09:32"
+        end = b.strftime("%Y%m%d 15:59")
+        df = iex.get_trading_chart("SQ", start, end)
+
+        start = pd.Timestamp(start)
+        end = pd.Timestamp(end)
+        startday = pd.Timestamp(start.strftime("%Y%m%d"))
+        actualdate = pd.Timestamp(df.iloc[0]['date'])
+        self.assertEqual(actualdate, startday)
+        msg1 = f"Was the market open on at {start}"
+        msg2 = f"Was the market open on between {start} at {end}"
         self.assertEqual(df.index[0], start, msg=msg1)
         self.assertEqual(df.index[-1], end, msg=msg2)
 
@@ -130,22 +128,18 @@ class TestMyiex(unittest.TestCase):
 
             # HACK ALERT -- there has got to be a better way to find the differnce in minutes
             # of a time string ---
-            min0 = df.index[0].split(":")
-            min1 = df.index[1].split(":")
+            min0 = df.index[0]
+            min1 = df.index[1]
 
-            (hour0, minute0) = (int(min0[0]), int(min0[1]))
-            (hour1, minute1) = (int(min1[0]), int(min1[1]))
-
-            t0 = dt.datetime(1111, 11, 11, hour0, minute0)
-            t1 = dt.datetime(1111, 11, 11, hour1, minute1)
-
-            delt = t1-t0
+            
+            delt = min1-min0
             interval_actual = delt.seconds//60
             self.assertEqual(interval_actual, interval)
 
     def test_get_trading_chart_filt(self):
         df = iex.get_trading_chart("SQ", filt='default')
-        self.assertEqual(len(df.columns), 5)
+        msg=str(df.columns)
+        self.assertEqual(len(df.columns), 5, msg)
         self.assertTrue('open' in df.columns)
         self.assertTrue('high' in df.columns)
         self.assertTrue('low' in df.columns)
