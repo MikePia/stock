@@ -71,9 +71,9 @@ def getiex_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
     An interface wrapper to the IEX intraday 1d API. Retrieves minute data for one of
     the last 30 days
     :params symbol: The ticker to get
-    :params start: A datetime object or time string for beginning of the chart. Start and end must 
+    :params start: A datetime object or time string for beginning of the chart. Start and end must
         be on the same day.
-    :params start: A datetime object or time string for end of the chart. Start and end must be on 
+    :params start: A datetime object or time string for end of the chart. Start and end must be on
         the same day.
     :params minutes: The length of the candle to retrieve.
     :params showUrl: If true, will print the URL before calling the API
@@ -123,7 +123,7 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, filt=False, show
     :params filt: Represents the columns to include. With no entry, all columns. filt=default will
         return ohlcv.  A comma seperated list will retrive those columns.
     :returns: A DataFrame from within a single day indexed by minutes.
-    :raise: Exception is the call return status != 200. 
+    :raise: Exception is the call return status != 200.
     '''
     url = "chart"
     rng = "1d"
@@ -153,9 +153,9 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, filt=False, show
         if filt == 'default':
             params['filter'] = 'date,minute,open,high,low,close, volume'
         else:
-            # User has asked for specific fields only. If minute and date are not among them, we need to remove them after
-            # they have outlived their usefulness below.
-            # We need the minute and date fields for the index
+            # User has asked for specific fields only. If minute and date are not among them, we
+            # need add them now and remove them after they have outlived their usefulness below.
+            # For now we need the minute and date fields to create a new index datetime
             if filt.find('minute') < 0:
                 filt = filt + ', minute'
                 removeFilt.append('minute')
