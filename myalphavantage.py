@@ -15,6 +15,7 @@ Calls the RESTapi for intraday. There is a limit on the free API of 5 calls per 
 # pylint: disable = C0301
 
 import datetime as dt
+import time
 import requests
 import pandas as pd
 from stock.picklekey import getKey
@@ -74,6 +75,7 @@ def getapis():
     return[EXAMPLES['api1'], EXAMPLES['api2'], EXAMPLES['api3'], EXAMPLES['api4'], EXAMPLES['api5']]
 
 
+
 def getLimits():
     '''alphavantage limits on usage'''
     print()
@@ -104,19 +106,27 @@ def ni(i):
                 15: '15min', 30: '30min', 60: '60min'
                 }[i]
     if isinstance(i, int):
+        ret = '60min'
         if i < 5:
-            return '1min'
+            ret = '1min'
         elif i < 15:
-            return '5min'
+            ret = '5min'
         elif i < 30:
-            return '15min'
+            ret = '15min'
         elif i < 60:
-            return '30min'
-        return '60min'
+            ret = '30min'
+        return ret
     print(
         f"interval={i} is not supported by alphavantage. Setting to 1min candle.")
     return '1min'
 
+RETRY = 3
+class Retries(object):
+    '''Number of retries when AV returns a 1 minute violation'''
+    def __init__(self):
+        self.retries = RETRY
+        self.setTime = time.time()
+R = None
 
 # TODO Could increase the number of avalable free calls by caching the data. Don't ever call
 # 5,15,30, or 60 min (at least for data in the last week) and use resample to get them. For
@@ -170,8 +180,18 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
     # If we exceed the requests/min, we get a friendly html string sales pitch.
     metaj = result[keys[0]]
     if len(keys) < 2:
+        global R            # pylint: disable = W0603
+        if not R:
+            R = 1
+            r = Retries()
+        if r.retries > 0:
+            print(metaj)
+            print(f'Will retry in 60 seconds: {RETRY - r.retries + 1} of {RETRY} tries.')
+            r.retries = r.retries - 1
+
+            time.sleep()
+            return getmav_intraday(symbol, start=start, end=end, minutes=minutes, showUrl=showUrl)
         # This tells us we have exceeded the limit and gives the premium link. AARRGH. Yahoo come back
-        print(metaj)
         return None
 
     dataJson = result[keys[1]]
@@ -202,7 +222,8 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
     if end:
         if end < df.index[-1]:
             df = df[df.index <= end]
-            if len(df) < 1:
+            l = len(df)
+            if l < 1:
                 print(
                     f"\nWARNING: you have sliced off all the data with the end date {end}")
                 return metaj, pd.DataFrame()
@@ -213,8 +234,6 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
                        '4. close': 'close',
                        '5. volume': 'volume'}, inplace=True)
 
-    # We got strings, probably because we had to invert the JSON data after creating a DataFrame
-    # TODO Find out how to invert the data in JSON before creating the DataFrame
     df.open = pd.to_numeric(df.open)
     df.high = pd.to_numeric(df.high)
     df.low = pd.to_numeric(df.low)
@@ -223,8 +242,6 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
 
     return metaj, df
 
-
-# TODO write getLastWeekday()
 if __name__ == '__main__':
     # df = getmav_intraday('SQ')
     # print(df.head())
