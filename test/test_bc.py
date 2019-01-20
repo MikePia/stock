@@ -9,10 +9,12 @@ import unittest
 import pandas as pd
 
 from stock import mybarchart as bc
-import inspect
+from stock import utilities as util
+# import inspect
 # from itertools import ifilter
 # pylint: disable = C0103
 # pylint: disable = R0914
+# pylint: disable = C0111
 
 
 def getPrevTuesWed(td):
@@ -42,44 +44,59 @@ class TestMybarchart(unittest.TestCase):
 
     def test_getbc_intraday(self):
         '''
-        This API will not retrieve todays data until 15 minutes after close. Given todays date at 14:00
-        it will retrive the previous business days stuff. 
+        This API will not retrieve todays data until 15 minutes after close. Given todays date at
+        14:00 it will retrive the previous business days stuff.
         '''
 
         # def test_getbc_intraday(self):
         now = dt.datetime.today()
-        tomorrow= now + dt.timedelta(1)
+        now = util.getLastWorkDay()          # We want to retrieve a day with data for testing here
+        tomorrow = now + dt.timedelta(1)
         y = now - dt.timedelta(1)
         ymorn = dt.datetime(y.year, y.month, y.day, 7, 30)
         yaft = dt.datetime(y.year, y.month, y.day, 17, 30)
         ymorn = getPrevTuesWed(ymorn)
         yaft = getPrevTuesWed(yaft)
-        beginDay = dt.datetime(now.year, now.month, now.day, 9,30)
-        endDay = dt.datetime(now.year, now.month, now.day, 16,0)
+        beginDay = dt.datetime(now.year, now.month, now.day, 9, 30)
+        endDay = dt.datetime(now.year, now.month, now.day, 16, 0)
 
-        # These should all retrieve the same data. No start date and today trigger a 1 
-        # day query for the most current biz day (which may be yesterday if its before 16:30 on Tuesday)
+        # These should all retrieve the same data. No start date and today trigger a 1day query
+        # for the most current biz day (which may be yesterday if its before 16:30 on Tuesday)
         dateArray = [(None, None),
-                    (beginDay, None),
-                    (None, endDay),
-                    (beginDay, endDay),
-                    (None, tomorrow)] # Same as both None
-        
-        #? I think the first gets more than one day (from start to current) and the second gets one historical day
+                     (beginDay, None),
+                     (None, endDay),
+                     (beginDay, endDay),
+                     (None, tomorrow)]  # Same as both None
+
         dateArray2 = [(ymorn, None), (ymorn, yaft)]
 
         # These should retrive 0 results with no Exception
         dateArray3 = [(None, yaft), (tomorrow, None)]
 
-        bdays=list()
+        bdays = list()
         # edays=list()
         for start, end in dateArray:
-            x, df = bc.getbc_intraday('SQ', start=start, end=end, showUrl = True)
+            x, df = bc.getbc_intraday('SQ', start=start, end=end, showUrl=True)
             if x['code'] == 666:
-                print('Abandon all hope of retrieving barchart data today. You have run out of free queries')
+                print('Abandon all hope of retrieving barchart data today.\n',
+                      'You have run out of free queries.')
                 return
             self.assertGreater(len(df), 0)
             bdays.append((df.index[0], df.index[-1]))
+
+            # Given start == None, barchart returns data from previous weekday (holidays ignored)
+            now = pd.Timestamp.today()
+            if not start:
+                start = df.index[0]
+                if now.isoweekday() > 5:
+                    self.assertLess(df.index[0].isoweekday(), 6, "Is it a holiday? Go party now!")
+            s = pd.Timestamp(start.year, start.month, start.day, 9, 29)
+            e = pd.Timestamp(start.year, start.month, start.day, 16, 1)
+            if start > s and start < e:
+                self.assertEqual(df.index[0], start)
+            if end and end > s and end < e:
+                self.assertEqual(df.index[-1], end)
+
         for i in range(len(bdays) - 1):
             self.assertEqual(bdays[i][0], bdays[i+1][0])
             self.assertEqual(bdays[i][1], bdays[i+1][1])
@@ -99,34 +116,38 @@ class TestMybarchart(unittest.TestCase):
         '''Test the candle intvarls by subtracting strings processed into times'''
         intervals = [2, 6, 60, 15]
         for interval in intervals:
-            x, df = bc.getbc_intraday("SQ", minutes=interval)
+            dummy, df = bc.getbc_intraday("SQ", minutes=interval)
 
-            # HACK ALERT -- there has got to be a better way to find the differnce in minutes
             # of a time string ---
             min0 = df.index[0]
             min1 = df.index[1]
 
             self.assertEqual((min1-min0).seconds, interval*60)
 
+
 def main():
-    '''test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest discovery'''
+    '''test discovery is not working in vscode. Use this code for debugging.
+    Then run cl python -m unittest discovery'''
     f = TestMybarchart()
     for name in dir(f):
         if name.startswith('test'):
             attr = getattr(f, name)
-            class B(): 
-                def a():pass
-            b=B()
+
+            class B():
+                def a(self):
+                    pass
+            b = B()
             if isinstance(attr, type(b.a)):
                 attr()
 
+
 def notmain():
+    '''Run some local stuff'''
     f = TestMybarchart()
-    # f.test_getbc_intraday()
-    f.test_getbc_intraday_interval()
+    f.test_getbc_intraday()
+    # f.test_getbc_intraday_interval()
+
 
 if __name__ == '__main__':
-    main()
-    # notmain()
-
-    
+    # main()
+    notmain()

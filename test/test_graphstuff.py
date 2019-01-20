@@ -8,20 +8,8 @@ import unittest
 
 import numpy as np
 from stock.graphstuff import FinPlot
+from stock import utilities as util
 # pylint: disable = C0103
-
-def getLastWorkDay(d=None):
-    '''
-    Retrieve the last biz day from today or from d if the arg is given
-    :params d: A datetime object.
-    :return: A datetime object of the last biz day.
-    '''
-    now = dt.datetime.today() if not d else d
-    deltDays = 0
-    if now.weekday() > 4:
-        deltDays = now.weekday() - 4
-    bizday = now - dt.timedelta(deltDays)
-    return bizday
 
 class TestGraphstuff(unittest.TestCase):
     '''
@@ -33,27 +21,30 @@ class TestGraphstuff(unittest.TestCase):
         Test the method FinPlot.apiChooser for the same interface in each api
         '''
         fp = FinPlot()
-        fp.api = 'iex'
-        biz = getLastWorkDay()
+        biz = util.getLastWorkDay()
         start = dt.datetime(biz.year, biz.month, biz.day, 12, 30)
         end = dt.datetime(biz.year, biz.month, biz.day, 16, 1)
-        x, df = fp.apiChooser()('SQ', start=start, end=end, showUrl=True)
-        self.assertEqual(len(df.columns), 5)
-        cols = ['open', 'high', 'low', 'close', 'volume']
-        for col in cols:
-            # print(col, type(df[col][0]), isinstance(df[col][0], (np.float, np.integer)))
-            self.assertTrue(col in df.columns)
-            self.assertTrue(isinstance(df[col][0], (np.float, np.integer)))
-        
-        self.assertTrue(isinstance(df.index[0], dt.datetime))
-        
-        print(df.columns)
-        print(df.dtypes)
-        print(type(df.index[0]))
-        print(len(df))
-        print(x)
-        print(df.index[0])
-        print(df.index[-1])
+        minutes = 1
+        apis = ['iex', 'mav', 'bc']
+        symbol = 'SQ'
+        for api in apis:
+            fp.api = api
+            dummy, df = fp.apiChooser()(symbol, start=start, end=end, minutes=minutes, showUrl=True)
+            self.assertEqual(len(df.columns), 5)
+            cols = ['open', 'high', 'low', 'close', 'volume']
+            for col in cols:
+                # print(col, type(df[col][0]), isinstance(df[col][0], (np.float, np.integer)))
+                self.assertTrue(col in df.columns)
+                self.assertTrue(isinstance(df[col][0], (np.float, np.integer)))
+
+            # This call should retrieve data within 1 bar of the requested start and finish.
+            # Idiosyncracies of the APIs vary as to inclusion of first and last time index
+            delt = df.index[0] - start if df.index[0] > start else start - df.index[0]
+            self.assertLessEqual(delt.seconds, minutes*60)
+
+            self.assertTrue(isinstance(df.index[0], dt.datetime))
+            print(f'Retrieved {len(df)} candles from {df.index[0]} to {df.index[-1]} for {symbol}')
+            print()
 
 def notmain():
     '''

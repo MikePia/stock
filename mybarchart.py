@@ -1,7 +1,7 @@
 '''
-Some barchart calls beginning (and ending now) with getHistory. Note that the docs show SOAP code to run this
-in python but as of 12/29/18 the suds module (suds not suds-py3) does not work on my system.
-I am goingto implement the straight RESTful free API using request
+Some barchart calls beginning (and ending now) with getHistory. Note that the docs show SOAP code
+to run this in python but as of 12/29/18 the suds module (suds not suds-py3) does not work on my
+system. I am goingto implement the straight RESTful free API using request.
 
 @author: Mike Petersen
 @creation_data: 12/19/18
@@ -12,7 +12,7 @@ import requests
 import pandas as pd
 # from stock import mybarchart as bc
 from stock.picklekey import getKey as getReg
-
+from stock import utilities as util
 # pylint: disable = C0103
 APIKEY = getReg('barchart')['key']
 
@@ -28,12 +28,13 @@ def getApiKey():
 def getLimits():
     '''Some useful info regarding barchart maximum usage.'''
     return '''Every user is able to make 400 getQuote queries and 150 getHistory queries per day.
-              One coud track a single stock for open hours updating once a minute.
+              Using getQuote, One coud track a single stock for open hours updating once a minute.
               Or one could track a single stock for one hour updating every 9 seconds.
-              https://www.barchart.com/ondemand/free-market-data-api/faq'''
+              https://www.barchart.com/ondemand/free-market-data-api/faq.'''
 
 
 BASE_URL = f'https://marketdata.websol.barchart.com/getHistory.json?'
+
 
 def getFaq():
     '''Intersting info'''
@@ -47,7 +48,7 @@ def getFaq():
         Every user is able to make 400 getQuote queries and 150 getHistory queries per day.
         When your daily API account query limit is reached, the data will be disabled then 
             reset until the next day.
-        pricing info for other apis requires you contact a sales person (shudder).
+        Pricing info for other apis requires you contact a sales person (shudder).
         '''
     return faq
 
@@ -92,19 +93,20 @@ DEMO_PARAMS = {'apikey': APIKEY,
 # Not getting the current date-- maybe after the market closes?
 def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', showUrl=False):
     '''
-    Note that getHistory will return previous day's prices until 15 minutes after the market 
-        closes. We will generate a warning if our start or end date differ from the date of the 
-        response. Given todays date at 14:00, it will retrive the previous business days stuff. 
-       
-    :params start: A datetime object or time string to indicate the begin time for the data. During 
-        trading hours, a start for today is ignored by barchart and it retrieves the previous biz day.
+    Note that getHistory will return previous day's prices until 15 minutes after the market
+        closes. We will generate a warning if our start or end date differ from the date of the
+        response. Given todays date at 14:00, it will retrive the previous business days stuff.
+        Given not start parameter, we will return data for the last weekday. Today or earlier.
+
+    :params start: A datetime object or time string to indicate the begin time for the data. During
+        trading hours, a start for today is ignored by barchart, it retrieves the previous biz day.
     :params end: A datetime object or time string to indicate the end time for the data
     :params minutes: An int for the candle time, 5 minute, 15 minute etc
-    :params daType: Possible values include  ['minutes', 'daily', 'weekly', 'monthly', 'quarterly', 
+    :params daType: Possible values include  ['minutes', 'daily', 'weekly', 'monthly', 'quarterly',
         'yearly'] print(TYPE) (a module variable) for full list.
-    :return: A tuple of (status as dictionary, data as a DataFrame ) This status is seperate from 
+    :return: A tuple of (status as dictionary, data as a DataFrame ) This status is seperate from
         request status_code.
-    :raise: ValueError if response.status_code from getHistory is not 200 or if daType is not recognized.
+    :raise: ValueError if response.status_code is not 200 or if daType is not recognized.
     '''
     request_url = BASE_URL
 
@@ -114,6 +116,7 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
     if not start:
         tdy = dt.datetime.today()
         start = dt.datetime(tdy.year, tdy.month, tdy.day, 6, 0)
+        start = util.getLastWorkDay(start)
     end = pd.to_datetime(end)
     start = pd.to_datetime(start)
     startDay = start.strftime("%Y%m%d")
@@ -146,7 +149,10 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
     if response.status_code != 200:
         raise Exception(
             f"{response.status_code}: {response.content.decode('utf-8')}")
-    if response.text and isinstance(response.text, str) and response.text.startswith('You have reached'):
+    if (
+            response.text
+            and isinstance(response.text, str)
+            and response.text.startswith('You have reached')):
         print('WARNING: API max queries:\n', response.text)
         meta = {'code': 666, 'message': response.text}
         return meta, pd.DataFrame()
@@ -164,8 +170,9 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
     df.set_index(df.timestamp, inplace=True)
     df.index.rename('date', inplace=True)
 
-    # HACKALERT hacky code alert Retrieve the tz hour and minutes  from the funky timestamp
-    # Subtradct Timedelta from to_datetime (Amazed the Series thing works like a matrix, written like a straight expression)
+    # HACKALERT hacky code alert Retrieve the tz hour and minutes  from the funky timestamp.
+    # Subtract Timedelta from to_datetime (Amazed the Series thing works like a matrix, written
+    # like a straight expression)
     hour = df.index[0][20:-3]
     minutes = df.index[0][23:]
     minutes = int(minutes)
@@ -181,20 +188,23 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
 
     msg = ''
     if start.date() < firstTime.date():
-        msg = "\nWARNING: Requested start date is not included in response. Did you request a weekend or holiday?"
+        msg = ' '.join("\nWARNING: Requested start date is not included in response. ",     # pylint: disable=E1121
+                       "Did you request a weekend or holiday?")
         msg = msg + f"First timestamp: {firstTime}\n"
         msg = msg + f"Requested start of data: {start}\n"
         print(msg)
 
     elif start.date() > firstTime.date():
-        msg = "\nWARNING: Requested start date is after the barchart response. If the market is still open?\n"
-        msg = msg + "Barchart will retrieve today after the close and not before.\n"
+        msg = "\nWARNING: Requested start date is after the barchart response. If the market is\n"
+        msg = msg + " still open? Barchart will retrieve today after the close and not before.\n"
         msg = msg + f"First timestamp: {firstTime}\n"
         msg = msg + f"Requested start of data: {start}\n"
         print(msg)
+    if start > df.index[0]:
+        df = df.loc[df.index >= start]
 
-    # getHistory trims the start nicely. We will trim the end here if requested by the end parameter.
-    # (I think the premium API does handle this. There is some mention of an endDate parameter)
+    # getHistory trims the start nicely. We trim the end here if requested by the end parameter.
+    # (I think the premium API does handle this. There is some mention of an 'end' parameter)
     if end < lastTime:
         df = df.loc[df.index <= end]
         # If we just sliced off all our data. Set warning message
@@ -211,6 +221,7 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
 
 
 def main():
+    '''Local runs for debugging'''
     # tdy = dt.datetime.today()
     # start = dt.datetime(tdy.year, tdy.month, tdy.day, 7)
     # end = dt.datetime(tdy.year, tdy.month, tdy.day, 15, 48)
