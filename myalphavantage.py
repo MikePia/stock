@@ -189,7 +189,7 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
             print(f'Will retry in 60 seconds: {RETRY - r.retries + 1} of {RETRY} tries.')
             r.retries = r.retries - 1
 
-            time.sleep()
+            time.sleep(60)
             return getmav_intraday(symbol, start=start, end=end, minutes=minutes, showUrl=showUrl)
         # This tells us we have exceeded the limit and gives the premium link. AARRGH. Yahoo come back
         return None

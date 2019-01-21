@@ -47,6 +47,39 @@ def getLimits():
                  '      say in spite of the docs)\n'])
     return l
 
+def ni(i, minutes='minutes'):
+    '''
+    Utility to normalize the the interval parameter.
+    '''
+    if minutes != 'minutes':
+        print(f'{minutes} is not supported yet. Setting to 1 min')
+    if i in BAR_SIZE:
+        return i
+    if i in ['1', '2', '3', '5', '10', '15', '20', '30', '60']:
+        return {'1': '1 min', '2': '2 mins', '3': '3 mins', '5': '5 mins', '10': '10 mins',
+                '15': '15 mins', '20': '20 mins', '30': '30 mins', '60': '1 hour'}[i]
+    if isinstance(i, int):
+        ret = '1 hour'
+        if i < 2:
+            ret = '1 min'
+        elif i < 3:
+            ret = '2 mins'
+        elif i < 5:
+            ret = '3 mins'
+        elif i < 10:
+            ret = '5 mins'
+        elif i < 15:
+            ret = '10 mins'
+        elif i < 20:
+            ret = '15 mins'
+        elif i < 30:
+            ret = '20 mins'
+        elif i < 60:
+            ret = '30 mins'
+        return ret
+    print(
+        f"interval = '{i}' is not supported by alphavantage. Setting to 1min candle.")
+    return '1 min'
 
 def validateDurString(s):
     '''
@@ -139,9 +172,11 @@ class TestApp(TestWrapper, TestClient):
     '''
     My very own double
     '''
-    def __init__(self):
+    def __init__(self, port, cid):
         TestWrapper.__init__(self)
         TestClient.__init__(self, wrapprr=self)
+        self.port = port
+        self.cid = cid
         # ! [socket_init]
 
         self.started = False
@@ -170,20 +205,20 @@ class TestApp(TestWrapper, TestClient):
 
         if not validateDurString(dur):
             print("Duration must be formatted like '3 D' using S, D, W, M, or Y")
-            return None
+            return pd.DataFrame()
 
         if not isinstance(end, dt.datetime):
             print("end must be formatted as a datetime object")
-            return None
+            return pd.DataFrame()
 
         if interval not in BAR_SIZE:
             print('Bar size ({}) must be one of: {}'.format(interval, BAR_SIZE))
-            return None
+            return pd.DataFrame()
 
         # app = Ib()
         host = "127.0.0.1"
-        port = 7496
-        clientId = 7878
+        port = self.port
+        clientId = self.cid
         self.connect(host, port, clientId)
 
         contract = Contract()
@@ -218,29 +253,7 @@ class TestApp(TestWrapper, TestClient):
             print("Request came back empty", ex.__class__.__name__, ex)
 
 
-
-def getIb_Hist(symbol, end, dur='1 D', interval='5 min'):
-    '''
-    Wrapper of getHistorical(symb,end, dur, interval, exchange). This method is designed for stocks.
-            IB Data subscriptions may limit this to stocks only.  IB requires TWS or IBGW to send and receive
-            any data.
-    :params symb: The stock ticker  like 'SQ or AAPL
-    :params end: The end datetime of your request
-    :params interval: Candle length. Legitimate values are found in the BAR_SIZE property
-
-    '''
-    symb = symbol
-    # daDate = end
-    interval = interval
-    # chart(symb, d, dur/, interval)
-    ib = TestApp()
-    # def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
-    df = ib.getHistorical(symb, end=end, dur=dur,
-                          interval=interval, exchange='NASDAQ')
-    ib.disconnect()
-    return df
-
-def getib_intraday(symbol, start, end, minutes):
+def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
     '''
     An interface API to match the other getters. In this case its a substantial
     dumbing down of the capabilities to our one specific need. Output will be limited
@@ -260,25 +273,53 @@ def getib_intraday(symbol, start, end, minutes):
         dur = f'{(end-start).days + 1} D'
     else:
         dur = f'{(end-start).days} D'
-        print('Requests longer than 6 days are not supported. Use getIb_Hist:', dur)
-        return pd.DataFrame([],[])
+        print('Requests longer than 6 days are not supported.')
+        return pd.DataFrame([], [])
+    
+    # if the end = 9:31 and dur = 3 minutes, ib will retrieve a start of the preceding day @ 15:58
+    # This is unique behavior in implemeted apis. We will just let ib do whatever and cut off the 
+    # beginning below. 
     print(f'dur={dur}')
-    df = getIb_Hist(symbol, end=end, dur=dur, interval=minutes)
-    s = df.index[0]
-    e = df.index[-1]
-    print(type(s))
-    print(s)
-    print(e)
-    return df
+
+    symb = symbol
+    # daDate = end
+    interval = ni(minutes)
+    # chart(symb, d, dur/, interval)
+    ib = TestApp(7496, 7878)
+    # def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
+    df = ib.getHistorical(symb, end=end, dur=dur,
+                          interval=interval, exchange='NASDAQ')
+    if len(df) == 0:
+        return 0, df
+
+    # df.set_index(df.date)
+    df.index = pd.to_datetime(df.index)
+    if start > df.index[0]:
+        df = df.loc[df.index >= start]
+
+    ib.disconnect()
+    return len(df), df
+
+
+    # df = getIb_Hist(symbol, end=end, dur=dur, interval=minutes)
+    # return df
 
 def main():
     '''test run'''
-    start = dt.datetime(2019, 1, 15, 13, 29)
-    end = dt.datetime(2019, 1, 15, 16, 5)
-    minutes='15 mins'
-    ddf = getIb_Hist('W', end=end, dur='14400 S', interval='30 mins')
-    print(ddf.index[0], ddf.index[-1])
-    print(ddf)
+    start = dt.datetime(2019, 1, 15, 9, 19)
+    end = dt.datetime(2019, 1, 15, 15, 5)
+    minutes='1 min'
+    ddf = getib_intraday('SQ', start, end, minutes)
+    # ddf = getIb_Hist('W', end=end, dur='14400 S', interval='30 mins')
+    print(f'Requested {start} .../... {end}')
+    print(f'Received  {ddf.index[0]} .../... {ddf.index[-1]}')
+    print(f'Index type: {type(ddf.index[0])}')
+    cols = ddf.columns
+    for col in cols:
+        # print(f"Col types: {col}: {type([df[col][0])}")
+        print(f'{col} {type(ddf[col][0])}')
+    print(ddf.head(3))
+    print(ddf.tail(3))
 
 
 
