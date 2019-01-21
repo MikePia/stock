@@ -89,27 +89,38 @@ DEMO_PARAMS = {'apikey': APIKEY,
                #    'jerq': 'true'
                }
 
+def setParams(symbol, minutes, startDay):
+    '''Internal utility method'''
+    params = {}
+    params['apikey'] = APIKEY
+    params['symbol'] = symbol
+    params['type'] = 'minutes'
+    params['interval'] = minutes
+    params['startDate'] = startDay
+    params['order'] = 'asc'
+    # params['maxRecords'] = 5
+    params['sessionFilter'] = 'EFK'
+    params['volume'] = 'sum'
+    params['nearby'] = 1
+    params['jerq'] = 'true'
+    return params
 
 # Not getting the current date-- maybe after the market closes?
-def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', showUrl=False):
+def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
     '''
     Note that getHistory will return previous day's prices until 15 minutes after the market
         closes. We will generate a warning if our start or end date differ from the date of the
         response. Given todays date at 14:00, it will retrive the previous business days stuff.
         Given not start parameter, we will return data for the last weekday. Today or earlier.
-
+    Retrieve candle data measured in minutes as given in the minutes parameter
     :params start: A datetime object or time string to indicate the begin time for the data. During
         trading hours, a start for today is ignored by barchart, it retrieves the previous biz day.
     :params end: A datetime object or time string to indicate the end time for the data
     :params minutes: An int for the candle time, 5 minute, 15 minute etc
-    :params daType: Possible values include  ['minutes', 'daily', 'weekly', 'monthly', 'quarterly',
-        'yearly'] print(TYPE) (a module variable) for full list.
     :return: A tuple of (status as dictionary, data as a DataFrame ) This status is seperate from
         request status_code.
     :raise: ValueError if response.status_code is not 200 or if daType is not recognized.
     '''
-    request_url = BASE_URL
-
     if not end:
         tdy = dt.datetime.today()
         end = dt.datetime(tdy.year, tdy.month, tdy.day, 17, 0)
@@ -121,28 +132,26 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
     start = pd.to_datetime(start)
     startDay = start.strftime("%Y%m%d")
 
-    if daType not in TYPE:
-        raise ValueError(f"daType must be one of {TYPE}")
+    # if daType not in TYPE:
+    #     raise ValueError(f"daType must be one of {TYPE}")
 
     # s = start.strftime("%Y-%m-%d %H:%M")
     # e = end.strftime("%Y-%m-%d %H:%M")
 
-    params = {}
-    params['apikey'] = APIKEY
-    params['symbol'] = symbol
-    params['type'] = daType
-    params['interval'] = minutes
-    params['startDate'] = startDay
-#     if end:
-#         params['endDate'] = end
-    params['order'] = 'asc'
-#     params['maxRecords'] = 5
-    params['sessionFilter'] = 'EFK'
-    params['volume'] = 'sum'
-    params['nearby'] = 1
-    params['jerq'] = 'true'
+    params = setParams(symbol, minutes, startDay)
+    # params['apikey'] = APIKEY
+    # params['symbol'] = symbol
+    # params['type'] = 'minutes'
+    # params['interval'] = minutes
+    # params['startDate'] = startDay
+    # params['order'] = 'asc'
+    # # params['maxRecords'] = 5
+    # params['sessionFilter'] = 'EFK'
+    # params['volume'] = 'sum'
+    # params['nearby'] = 1
+    # params['jerq'] = 'true'
 
-    response = requests.get(request_url, params=params)
+    response = requests.get(BASE_URL, params=params)
     if showUrl:
         print(response.url)
 
@@ -165,39 +174,30 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
 
     keys = list(result.keys())
     meta = result[keys[0]]
-    JSONTimeSeries = result[keys[1]]
-    df = pd.DataFrame(JSONTimeSeries)
+    # JSONTimeSeries = result[keys[1]]
+    df = pd.DataFrame(result[keys[1]])
     df.set_index(df.timestamp, inplace=True)
     df.index.rename('date', inplace=True)
 
     # HACKALERT hacky code alert Retrieve the tz hour and minutes  from the funky timestamp.
-    # Subtract Timedelta from to_datetime (Amazed the Series thing works like a matrix, written
-    # like a straight expression)
-    hour = df.index[0][20:-3]
-    minutes = df.index[0][23:]
-    minutes = int(minutes)
-    hour = int(hour)
-    seconds = minutes*60
+    # Subtract Timedelta from to_datetime
+    hour = int(df.index[0][20:-3])
+    seconds = int(df.index[0][23:])*60
     df.index = pd.to_datetime(df.index, utc=False) - \
-        pd.Timedelta(hours=5, seconds=seconds)
-
-    firstTime = df.index[0]
-    # firstDay = df.iloc[0].tradingDay
-
-    lastTime = df.index[-1]
+        pd.Timedelta(hours=hour, seconds=seconds)
 
     msg = ''
-    if start.date() < firstTime.date():
-        msg = ' '.join("\nWARNING: Requested start date is not included in response. ",     # pylint: disable=E1121
-                       "Did you request a weekend or holiday?")
-        msg = msg + f"First timestamp: {firstTime}\n"
-        msg = msg + f"Requested start of data: {start}\n"
+    if start.date() < df.index[0].date():
+        msg = ' '.join(["\nWARNING: Requested start date is not included in response. ",
+                        "Did you request a weekend or holiday?",
+                        f"First timestamp: {df.index[0]}\n",
+                        f"Requested start of data: {start}\n"])
         print(msg)
 
-    elif start.date() > firstTime.date():
+    elif start.date() > df.index[0].date():
         msg = "\nWARNING: Requested start date is after the barchart response. If the market is\n"
         msg = msg + " still open? Barchart will retrieve today after the close and not before.\n"
-        msg = msg + f"First timestamp: {firstTime}\n"
+        msg = msg + f"First timestamp: {df.index[0]}\n"
         msg = msg + f"Requested start of data: {start}\n"
         print(msg)
     if start > df.index[0]:
@@ -205,12 +205,13 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, daType='minutes', sh
 
     # getHistory trims the start nicely. We trim the end here if requested by the end parameter.
     # (I think the premium API does handle this. There is some mention of an 'end' parameter)
-    if end < lastTime:
+    if end < df.index[-1]:
         df = df.loc[df.index <= end]
         # If we just sliced off all our data. Set warning message
-        msg = msg + '\nWARNING: all data has been removed.'
-        msg = msg + \
-            f'\nThe Requested end ({end}) is less than the actual end ({lastTime}).'
+        if len(df) == 0:
+            msg = msg + '\nWARNING: all data has been removed.'
+            msg = msg + \
+                f'\nThe Requested end was({end}).'
 
     # Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[]
     df = df[['open', 'high', 'low', 'close', 'volume']].copy(deep=True)
