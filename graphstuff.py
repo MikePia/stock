@@ -107,6 +107,49 @@ class FinPlot(object):
             retList = (self.matchFont(default))
         return retList
 
+    def apiChooserList(self, start, end, api=None):
+        '''
+        Given the current list of apis as mav, bc, iex, and ib, determine if the given api will 
+            likely return data for the given times. 
+        :params start: A datetime object or time stamp indicating the intended start of the chart. 
+        :params end: A datetime object or time stamp indicating the intended end of the chart.
+        :params api: Param must be one of mab, bc, iex, or ib. If given, the return value in 
+            (api, x, x)[0] will reflect the bool result of the api
+        :return: (bool, rulesviolated, suggestedStocks) The first entry is only valid if api is 
+            an argument.
+
+        '''
+        start = pd.Timestamp(start)
+        end = pd.Timestamp(end)
+        n = pd.Timestamp.now() + dt.timedelta(0, 60*120)        # Adding 2 hours for NY time
+        violatedRules = []
+        suggestedApis = ['mav', 'ib', 'bc', 'iex']
+
+        nopen = dt.datetime(n.year, n.month, n.day, 9, 30)
+        nclose = dt.datetime(n.year, n.month, n.day, 16, 30)
+
+        # Rule 1 Barchart will not return todays data till 16:30
+        if n < nclose:
+            suggestedApis.remove('bc')
+            violatedRules.append('Barchart will not return todays data till 16:30')
+
+        # Rule 2 No support any charts greater than 7 days prior till today
+        if n > start:
+            delt = n - start
+            if delt.days > 7:
+                suggestedApis = []
+                violatedRules.append('No support any charts greater than 7 days prior till today')
+
+        # Rule 3 No data is available for the future
+        if n > end:
+            suggestedApis = []
+            violatedRules.append('No data is available for the future.')
+
+        
+        api = api in suggestedApis if api else False
+
+        return(api, violatedRules, suggestedApis)
+
     def apiChooser(self):
         '''
         Get a data method
@@ -192,6 +235,19 @@ class FinPlot(object):
         #     df = iex.get_trading_chart(stock)
 
         # df = iex.get_historical_chart(symbol, start, end)
+        result = self.apiChooserList(start, end)
+        PreferredApis = ['bc', 'mav', 'ib', 'iex']
+        success = True
+        for api in PreferredApis:
+            if api in result:
+                self.api = api
+                success = False
+                break
+        if not success:
+            print('FAIL')
+            for rule in result[1]:
+                return
+
         dummy, df = (self.apiChooser())(
             symbol, start=start, end=end, minutes=minutes)
         # df.index = df.rename(columns={df.index.name:'date'})
