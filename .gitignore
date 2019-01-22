@@ -10,3 +10,4 @@ __pycache__
 .project
 .pydevproject
 out/
+*.code-workspace

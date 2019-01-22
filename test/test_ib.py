@@ -46,7 +46,7 @@ class TestMyib(unittest.TestCase):
 
         for x in tests:
             for xx in x[0]:
-                # print(f'From {xx}, and expecting {x[1]}  ....   {ib.ni(xx)}')
+                print(f'From {xx}, and expecting {x[1]}  ....   {ib.ni(xx)}')
                 self.assertEqual(ib.ni(xx), x[1])
 
 
