@@ -200,24 +200,29 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
         msg = msg + f"First timestamp: {df.index[0]}\n"
         msg = msg + f"Requested start of data: {start}\n"
         print(msg)
+
     if start > df.index[0]:
         df = df.loc[df.index >= start]
+        if len(df) == 0:
+            msg = '\nWARNING: all data has been removed.'
+            msg = msg + f'\nThe Requested start was({start}).'
+            print(msg)
+            meta['code2'] = 199
+            meta['message'] = meta['message'] + msg
+            return meta, df
 
-    # getHistory trims the start nicely. We trim the end here if requested by the end parameter.
-    # (I think the premium API does handle this. There is some mention of an 'end' parameter)
     if end < df.index[-1]:
         df = df.loc[df.index <= end]
         # If we just sliced off all our data. Set warning message
         if len(df) == 0:
             msg = msg + '\nWARNING: all data has been removed.'
-            msg = msg + \
-                f'\nThe Requested end was({end}).'
+            msg = msg + f'\nThe Requested end was({end}).'
+            meta['code2'] = 199
+            meta['message'] = meta['message'] + msg
+            return meta, df
 
     # Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[]
     df = df[['open', 'high', 'low', 'close', 'volume']].copy(deep=True)
-    if msg:
-        meta['code2'] = 199
-        meta['message'] = meta['message'] + msg
     return meta, df
 
 
