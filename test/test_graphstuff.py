@@ -29,23 +29,30 @@ class TestGraphstuff(unittest.TestCase):
         symbol = 'SQ'
         for api in apis:
             fp.api = api
-            dummy, df = fp.apiChooser()(symbol, start=start, end=end, minutes=minutes, showUrl=True)
-            self.assertEqual(len(df.columns), 5, f"Failed to retrieve data with the {fp.api} api")
-            self.assertTrue(isinstance(df.index[0], dt.datetime),
-                            f'Failed to set index to datetime in {fp.api} api')
-            cols = ['open', 'high', 'low', 'close', 'volume']
-            for col in cols:
-                # print(col, type(df[col][0]), isinstance(df[col][0], (np.float, np.integer)))
-                self.assertTrue(col in df.columns)
-                self.assertTrue(isinstance(df[col][0], (np.float, np.integer)))
+            result = fp.apiChooserList(start, end, api)
+            if result[0]:
+                dummy, df = fp.apiChooser()(symbol, start=start, end=end, minutes=minutes, showUrl=True)
+                self.assertEqual(len(df.columns), 5, f"Failed to retrieve data with the {fp.api} api")
+                self.assertTrue(isinstance(df.index[0], dt.datetime),
+                                f'Failed to set index to datetime in {fp.api} api')
+                cols = ['open', 'high', 'low', 'close', 'volume']
+                for col in cols:
+                    # print(col, type(df[col][0]), isinstance(df[col][0], (np.float, np.integer)))
+                    self.assertTrue(col in df.columns)
+                    self.assertTrue(isinstance(df[col][0], (np.float, np.integer)))
 
-            # This call should retrieve data within 1 bar of the requested start and finish.
-            # Idiosyncracies of the APIs vary as to inclusion of first and last time index
-            delt = df.index[0] - start if df.index[0] > start else start - df.index[0]
-            self.assertLessEqual(delt.seconds, minutes*60)
+                # This call should retrieve data within 1 bar of the requested start and finish.
+                # Idiosyncracies of the APIs vary as to inclusion of first and last time index
+                delt = df.index[0] - start if df.index[0] > start else start - df.index[0]
+                self.assertLessEqual(delt.seconds, minutes*60)
 
-            print(f'Retrieved {len(df)} candles from {df.index[0]} to {df.index[-1]} for {symbol}')
-            print()
+                print(f'Retrieved {len(df)} candles from {df.index[0]} to {df.index[-1]} for {symbol}')
+                print()
+            else:
+                print('Skipped {api} at {start} to {end} because...')
+                for rule in result[1]:
+                    print(rule)
+                
 
     def test_dummyName(self):
         '''
@@ -107,6 +114,45 @@ class TestGraphstuff(unittest.TestCase):
             name = dummyName(fp, trade[0], trade[1], trade[2], trade[3])
             fp.graph_candlestick(trade[0], start, end, save=name)
 
+    def test_setTimeFrame(self):
+        '''
+        setTimeFrame will require usage to figure out the right settings. Its purpose is to frame
+        the chart with enough time before and after the transactions to give perspective to the
+        trade. Ideally, it will include some intelligence with trending information and evaluation
+        of the highs and lows within the day. The point here is this method is not done. 
+        '''
+        fp = FinPlot()
+        odate = dt.datetime(2019, 1,19, 9, 40)
+        cdate = dt.datetime(2019, 1,19, 16, 30)
+        opening = dt.datetime(2019, 1, 19, 9, 30)
+        closing = dt.datetime(2019, 1, 19, 16, 00)
+        interval = 1
+        interval2 = 60
+        #tests dependent on interval -- setting to 1
+        for i in range(1, 10):
+            s,e  = fp.setTimeFrame(odate, cdate, interval)
+            s2,e2  = fp.setTimeFrame(odate, cdate, interval2)
+            if odate < opening:
+                self.assertEqual(s, opening)
+                self.assertEqual(s2, opening)
+            else:
+                delt = odate - s
+                delt2 = odate - s2
+                self.assertLess(delt.seconds, 3600)
+                self.assertLess(delt2.seconds, 3600 * 3.1)
+            mins =  40
+            odate = odate + dt.timedelta(0, mins * 60)
+            cdate = cdate - dt.timedelta(0, mins * 60)
+
+def main():
+    '''test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest discovery'''
+    f = TestGraphstuff()
+    for name in dir(f):
+        if name.startswith('test'):
+            attr = getattr(f, name)
+            if isinstance(attr, type(f.test_apiChooser)):
+                attr()
+
 
 def notmain():
     '''
@@ -115,10 +161,12 @@ def notmain():
     t = TestGraphstuff()
     # t.test_apiChooser()
     # t.test_dummyName()
-    t.test_graph_candlestick()
+    # t.test_graph_candlestick()
     # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
+    t.test_setTimeFrame()
 
 
 
 if __name__ == '__main__':
-    notmain()
+    # notmain()
+    main()
