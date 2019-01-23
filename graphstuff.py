@@ -122,6 +122,7 @@ class FinPlot(object):
         start = pd.Timestamp(start)
         end = pd.Timestamp(end)
         n = pd.Timestamp.now() + dt.timedelta(0, 60*120)        # Adding 2 hours for NY time
+
         violatedRules = []
         suggestedApis = ['mav', 'ib', 'bc', 'iex']
 
@@ -129,7 +130,9 @@ class FinPlot(object):
         nclose = dt.datetime(n.year, n.month, n.day, 16, 30)
 
         # Rule 1 Barchart will not return todays data till 16:30
-        if n < nclose:
+        tradeday = pd.Timestamp(start.year, start.month, start.day)
+        todayday = pd.Timestamp(n.year, n.month, n.day)
+        if tradeday == todayday and n < nclose:
             suggestedApis.remove('bc')
             violatedRules.append('Barchart will not return todays data till 16:30')
 
@@ -141,7 +144,7 @@ class FinPlot(object):
                 violatedRules.append('No support any charts greater than 7 days prior till today')
 
         # Rule 3 No data is available for the future
-        if n > end:
+        if start > n:
             suggestedApis = []
             violatedRules.append('No data is available for the future.')
 
@@ -218,50 +221,21 @@ class FinPlot(object):
 
         start = pd.Timestamp(start)
         end = pd.Timestamp(end)
-        now = pd.Timestamp.today()
-        delt = now - start
-        if delt.days > 7:
-            print("graph_candlestick is unable to retrieve graphs older than 7 days")
-            s = start.strftime("%A, %B %d")
-            print('WARING: no graph created for {symbol} beginning {s}')
-            return
 
         if self.randomStyle:
             r = random.randint(0, len(style.available)-1)
             self.style = style.available[r]
         style.use(self.style)
 
-        #     df=mav.getmav_intraday(stock)
-        #     df = iex.get_trading_chart(stock)
-
-        # df = iex.get_historical_chart(symbol, start, end)
-        result = self.apiChooserList(start, end)
-        PreferredApis = ['bc', 'mav', 'ib', 'iex']
-        success = True
-        for api in PreferredApis:
-            if api in result:
-                self.api = api
-                success = False
-                break
-        if not success:
-            print('FAIL')
-            for rule in result[1]:
-                return
-
         dummy, df = (self.apiChooser())(
             symbol, start=start, end=end, minutes=minutes)
-        # df.index = df.rename(columns={df.index.name:'date'})
         df['date'] = df.index
-        # df.reset_index(level=0, inplace=True)
-        print(type(df.date))
 
-        # df['date'] = pd.to_datetime(df['date'])
         df['date'] = df['date'].map(mdates.date2num)
 
         df_ohlc = df[['date', 'open', 'high', 'low', 'close']]
         # df_volume = df['volume']
 
-        # Arguments( shape=(1,1), starting point = (0,0), rowspan, columnspan)
         ax1 = plt.subplot2grid((6, 1), (0, 0), rowspan=5, colspan=1)
         fig = plt.gcf()
 

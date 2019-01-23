@@ -111,8 +111,21 @@ class TestGraphstuff(unittest.TestCase):
             ['NFLX', 4, '2019-01-18 09:47', '2019-01-18 09:51', 1]]
         for trade in trades:
             start, end = fp.setTimeFrame(trade[2], trade[3], trade[4] )
-            name = dummyName(fp, trade[0], trade[1], trade[2], trade[3])
-            fp.graph_candlestick(trade[0], start, end, save=name)
+            (dummy, rules, apilist) = fp.apiChooserList(trade[2], trade[3])
+            print(f'{apilist}/n{rules}')
+            for api in apilist:
+                fp.api = api
+                if api == 'iex':
+                    fp.interactive = True
+                name = dummyName(fp, trade[0], trade[1], trade[2], trade[3])
+                try:
+                    fp.graph_candlestick(trade[0], start, end, save=name)
+                except Exception as ex:
+                    print
+                    print(f"While attempting to create {name}")
+                    print(ex, ex.__class__.__name__)
+                    print
+                fp.interactive = False
 
     def test_setTimeFrame(self):
         '''
@@ -161,12 +174,12 @@ def notmain():
     t = TestGraphstuff()
     # t.test_apiChooser()
     # t.test_dummyName()
-    # t.test_graph_candlestick()
+    t.test_graph_candlestick()
     # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
-    t.test_setTimeFrame()
+    # t.test_setTimeFrame()
 
 
 
 if __name__ == '__main__':
-    # notmain()
-    main()
+    notmain()
+    # main()

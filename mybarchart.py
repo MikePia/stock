@@ -236,7 +236,7 @@ def main():
     interval = 1
     symbol = 'AAPL'
     x, bcdf = getbc_intraday(symbol, start=start, end=end, minutes=interval)
-    print(x)
+    # print(x)
     print(bcdf.head(2))
     print(bcdf.tail(2))
 

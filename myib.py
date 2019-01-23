@@ -87,7 +87,7 @@ def validateDurString(s):
     '''
     d = ['S', 'D', 'W', 'M', 'Y']
     sp = s.split()
-    print(sp)
+    # print(sp)
     if len(sp) != 2:
         return False
     if sp[1] not in d:
@@ -132,18 +132,16 @@ class TestWrapper(wrapper.EWrapper):
         '''
         Overriden method to return all errors to us
         '''
-        print(f"Error: {reqId} {errorCode} {errorString}")
+        if reqId != -1:
+            print(f"Error: {reqId} {errorCode} {errorString}")
 
     def historicalData(self, reqId: int, bar):
         '''
         Overriden Callback from EWrapper. Drops off data 1 bar at a time in each call.
         '''
         if self.counter == 0:
-            print("beginning")
-#             print("originally Type:", type(bar))
             l = []
             l.append(bar)
-            print('time', bar.date)
         self.counter = self.counter + 1
         self.data.append([bar.date, bar.open, bar.high,
                           bar.low, bar.close, bar.volume])
@@ -155,12 +153,8 @@ class TestWrapper(wrapper.EWrapper):
         '''
 
         super().historicalDataEnd(reqId, start, end)
-        print("HistoricalDataEnd. ReqId:", reqId, "from", start, "to", end)
-        print("GOT LINES:", len(self.data))
-        print("TYPE:", type(self.data[0]))
         df = pd.DataFrame(self.data,
                           columns=['date', 'open', 'high', 'low', 'close', 'volume'])
-        print('filling the queue')
         self.storage.put(df)
         # GDF=df
         # print(df)
@@ -236,7 +230,7 @@ class TestApp(TestWrapper, TestClient):
         self.reqHistoricalData(4001, contract, timeStr, dur,
                                interval, "TRADES", 1, 1, False, [])
         # client.reqHistoricalData(4002, ContractSamples.EuropeanStock(), queryTime, "10 D", "1 min", "TRADES", 1, 1, false, null);
-        print('Requesting access')
+        # print('Requesting access')
 
         # self.run()
         thread = Thread(target=self.run)
@@ -251,6 +245,7 @@ class TestApp(TestWrapper, TestClient):
             return x
         except queue.Empty as ex:
             print("Request came back empty", ex.__class__.__name__, ex)
+            return pd.DataFrame()
 
 
 def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
@@ -279,7 +274,6 @@ def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
     # if the end = 9:31 and dur = 3 minutes, ib will retrieve a start of the preceding day @ 15:58
     # This is unique behavior in implemeted apis. We will just let ib do whatever and cut off the 
     # beginning below. 
-    print(f'dur={dur}')
 
     symb = symbol
     # daDate = end
@@ -309,16 +303,17 @@ def main():
     start = dt.datetime(2019, 1, 15, 9, 19)
     end = dt.datetime(2019, 1, 15, 15, 5)
     minutes='1 min'
-    ddf = getib_intraday('SQ', start, end, minutes)
+    x, ddf = getib_intraday('SQ', start, end, minutes)
     # ddf = getIb_Hist('W', end=end, dur='14400 S', interval='30 mins')
-    print(f'Requested {start} .../... {end}')
-    print(f'Received  {ddf.index[0]} .../... {ddf.index[-1]}')
-    print(f'Index type: {type(ddf.index[0])}')
-    cols = ddf.columns
-    for col in cols:
-        # print(f"Col types: {col}: {type([df[col][0])}")
-        print(f'{col} {type(ddf[col][0])}')
-    print(ddf.head(3))
+    # print(f'Requested {start} 
+    # /... {end}')
+    # print(f'Received  {ddf.index[0]} .../... {ddf.index[-1]}')
+    # print(f'Index type: {type(ddf.index[0])}')
+    # cols = ddf.columns
+    # for col in cols:
+    #     # print(f"Col types: {col}: {type([df[col][0])}")
+    #     print(f'{col} {type(ddf[col][0])}')
+    # print(ddf.head(3))
     print(ddf.tail(3))
 
 
