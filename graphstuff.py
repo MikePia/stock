@@ -175,9 +175,15 @@ class FinPlot(object):
         Set the amount of time before the first transaction and after the last transaction
         to include in the chart. This may include some trend examination in the future. 
         For now just add some time based on the time of day and the candle interval
+        :params begin: A datetime object or time string for the first transaction time.
+        :params end: A datetime object or time string for the last transaction time.
+        :params interval: The candle length.
+        return: A tuple (begin, end) for the suggested chart begin and end times.
         '''
         begin = pd.Timestamp(begin)
         end = pd.Timestamp(end)
+        beginday = pd.Timestamp(begin.year, begin.month, begin.day, 0,0)
+        endday = pd.Timestamp(end.year, end.month, end.day, 23,59) 
         xtime = 0
         if interval < 5:
             xtime = 20
@@ -189,9 +195,13 @@ class FinPlot(object):
             xtime = 180
         begin = begin - dt.timedelta(0, xtime*60)
         end = end + dt.timedelta(0, xtime*60)
+
         
-        mopen = dt.datetime(begin.year, begin.month, begin.day, 9, 30)
-        mclose = dt.datetime(end.year, end.month, end.day, 16, 0)
+        mopen = dt.datetime(beginday.year, beginday.month, beginday.day, 9, 30)
+        mclose = dt.datetime(endday.year, endday.month, endday.day, 16, 0)
+
+        begin = mopen if begin <= beginday else begin
+        end = mclose if end >= endday else end
 
         begin = mopen if mopen > begin else begin
         end = mclose if mclose < end else end
@@ -202,13 +212,7 @@ class FinPlot(object):
     def graph_candlestick(self, symbol, start=None, end=None, minutes=1,
                           dtFormat="%H:%M", save='trade'):
         '''
-        :Programmer Info: Configuring date is weird. matplotlib has its date format. The usage here
-            is first change the date from string to timestamp using pd.to_datetime. Second, use
-            pd's map(mdates.date2num) to convert from timestamp to matplotlib.dates -- aka mdate
-            Finally, format the weird pd date using
-            ax1.xaxis.set_major_formatter(mdates.DateFormatter(dtFormat))
-        Currently this will retrieve the data from barchart. This will move to a chooser method to
-            select among available sources like iex, alphavantage, quandl, and ib api.
+        Currently this will retrieve the data using apiChooser
         :params symbol: The stock ticker
         :params start: A datetime object or time string for the begining of the graph. The day must
             be within the last 7 days. This may change in the future.

@@ -135,6 +135,8 @@ class TestGraphstuff(unittest.TestCase):
         of the highs and lows within the day. The point here is this method is not done. 
         '''
         fp = FinPlot()
+        early = dt.datetime(2019, 1, 19, 0, 0)
+        late = dt.datetime(2019, 1, 19, 23, 55)
         odate = dt.datetime(2019, 1,19, 9, 40)
         cdate = dt.datetime(2019, 1,19, 16, 30)
         opening = dt.datetime(2019, 1, 19, 9, 30)
@@ -145,6 +147,7 @@ class TestGraphstuff(unittest.TestCase):
         for i in range(1, 10):
             s,e  = fp.setTimeFrame(odate, cdate, interval)
             s2,e2  = fp.setTimeFrame(odate, cdate, interval2)
+            s3, e3 = fp.setTimeFrame(early, late, interval)
             if odate < opening:
                 self.assertEqual(s, opening)
                 self.assertEqual(s2, opening)
@@ -153,9 +156,15 @@ class TestGraphstuff(unittest.TestCase):
                 delt2 = odate - s2
                 self.assertLess(delt.seconds, 3600)
                 self.assertLess(delt2.seconds, 3600 * 3.1)
+            if early < opening:
+                self.assertEqual(s3, opening)
+            if late > closing:
+                self.assertEqual(e3, closing)
             mins =  40
             odate = odate + dt.timedelta(0, mins * 60)
             cdate = cdate - dt.timedelta(0, mins * 60)
+            early = early +  dt.timedelta(0, mins * 60)
+            late = late - dt.timedelta(0, mins * 60)
 
 def main():
     '''test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest discovery'''
@@ -174,9 +183,9 @@ def notmain():
     t = TestGraphstuff()
     # t.test_apiChooser()
     # t.test_dummyName()
-    t.test_graph_candlestick()
+    # t.test_graph_candlestick()
     # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
-    # t.test_setTimeFrame()
+    t.test_setTimeFrame()
 
 
 
