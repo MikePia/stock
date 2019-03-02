@@ -8,9 +8,7 @@ system. I am goingto implement the straight RESTful free API using request.
 '''
 import datetime as dt
 import requests
-# from stock import myalphavantage as mav
 import pandas as pd
-# from stock import mybarchart as bc
 from stock.picklekey import getKey as getReg
 from stock import utilities as util
 # pylint: disable = C0103
@@ -105,25 +103,31 @@ def setParams(symbol, minutes, startDay):
     params['jerq'] = 'true'
     return params
 
-# Not getting the current date-- maybe after the market closes?
+# Not getting the current date-- maybe after the market closes? 
 def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
     '''
     Note that getHistory will return previous day's prices until 15 minutes after the market
         closes. We will generate a warning if our start or end date differ from the date of the
         response. Given todays date at 14:00, it will retrive the previous business days stuff.
         Given not start parameter, we will return data for the last weekday. Today or earlier.
+        We will return everything we between start and end. It may be incomplete. 
+        Its now limiting yesterdays data. At 3:00, the latest I get is yesterday
+        up to 12 noon.
     Retrieve candle data measured in minutes as given in the minutes parameter
-    :params start: A datetime object or time string to indicate the begin time for the data. During
-        trading hours, a start for today is ignored by barchart, it retrieves the previous biz day.
+    :params start: A datetime object or time string to indicate the begin time for the data. By 
+        default, start will be set to the most recent weekday at market open.
     :params end: A datetime object or time string to indicate the end time for the data
     :params minutes: An int for the candle time, 5 minute, 15 minute etc
-    :return: A tuple of (status as dictionary, data as a DataFrame ) This status is seperate from
-        request status_code.
-    :raise: ValueError if response.status_code is not 200 or if daType is not recognized.
+    :return (status, data): A tuple of (status as dictionary, data as a DataFrame ) This status is
+        seperate from request status_code.
+    :raise: ValueError if response.status_code is not 200.
     '''
+
     if not end:
         tdy = dt.datetime.today()
         end = dt.datetime(tdy.year, tdy.month, tdy.day, 17, 0)
+    # end
+
     if not start:
         tdy = dt.datetime.today()
         start = dt.datetime(tdy.year, tdy.month, tdy.day, 6, 0)
@@ -132,24 +136,8 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
     start = pd.to_datetime(start)
     startDay = start.strftime("%Y%m%d")
 
-    # if daType not in TYPE:
-    #     raise ValueError(f"daType must be one of {TYPE}")
-
-    # s = start.strftime("%Y-%m-%d %H:%M")
-    # e = end.strftime("%Y-%m-%d %H:%M")
-
     params = setParams(symbol, minutes, startDay)
-    # params['apikey'] = APIKEY
-    # params['symbol'] = symbol
-    # params['type'] = 'minutes'
-    # params['interval'] = minutes
-    # params['startDate'] = startDay
-    # params['order'] = 'asc'
-    # # params['maxRecords'] = 5
-    # params['sessionFilter'] = 'EFK'
-    # params['volume'] = 'sum'
-    # params['nearby'] = 1
-    # params['jerq'] = 'true'
+
 
     response = requests.get(BASE_URL, params=params)
     if showUrl:
@@ -165,6 +153,8 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
         print('WARNING: API max queries:\n', response.text)
         meta = {'code': 666, 'message': response.text}
         return meta, pd.DataFrame()
+
+
     result = response.json()
     if not result['results']:
         print(
@@ -172,19 +162,28 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
         print(result['status'])
         return result['status'], pd.DataFrame()
 
+
     keys = list(result.keys())
     meta = result[keys[0]]
+
+
     # JSONTimeSeries = result[keys[1]]
     df = pd.DataFrame(result[keys[1]])
-    df.set_index(df.timestamp, inplace=True)
-    df.index.rename('date', inplace=True)
 
     # HACKALERT hacky code alert Retrieve the tz hour and minutes  from the funky timestamp.
     # Subtract Timedelta from to_datetime
-    hour = int(df.index[0][20:-3])
-    seconds = int(df.index[0][23:])*60
-    df.index = pd.to_datetime(df.index, utc=False) - \
-        pd.Timedelta(hours=hour, seconds=seconds)
+    hour = int(df.timestamp[0][20:-3])
+    seconds = int(df.timestamp[0][23:])*60
+
+    # there has got to be a better way to do this-- 
+    for i, row in df.iterrows():
+        d = pd.to_datetime(df.at[i, 'timestamp'])
+        newd = pd.Timestamp(d.year, d.month, d.day, d.hour, d.minute, d.second)
+        df.at[i, 'timestamp'] = newd
+        # print(d, newd)
+
+    df.set_index(df.timestamp, inplace=True)
+    df.index.rename('date', inplace=True)
 
     msg = ''
     if start.date() < df.index[0].date():
@@ -201,7 +200,7 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
         msg = msg + f"Requested start of data: {start}\n"
         print(msg)
 
-    if start > df.index[0]:
+    if start > df.index[-1]:
         df = df.loc[df.index >= start]
         if len(df) == 0:
             msg = '\nWARNING: all data has been removed.'
@@ -211,6 +210,7 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
             meta['message'] = meta['message'] + msg
             return meta, df
 
+
     if end < df.index[-1]:
         df = df.loc[df.index <= end]
         # If we just sliced off all our data. Set warning message
@@ -219,6 +219,7 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
             msg = msg + f'\nThe Requested end was({end}).'
             meta['code2'] = 199
             meta['message'] = meta['message'] + msg
+            print (meta)
             return meta, df
 
     # Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[]
@@ -228,17 +229,13 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
 
 def main():
     '''Local runs for debugging'''
-    # tdy = dt.datetime.today()
-    # start = dt.datetime(tdy.year, tdy.month, tdy.day, 7)
-    # end = dt.datetime(tdy.year, tdy.month, tdy.day, 15, 48)
-    start = '2019-01-09'
-    end = '2019-01-14'
-    interval = 1
-    symbol = 'AAPL'
-    x, bcdf = getbc_intraday(symbol, start=start, end=end, minutes=interval)
-    # print(x)
-    print(bcdf.head(2))
-    print(bcdf.tail(2))
+    symbol = 'SQ'
+    showUrl = True
+    end = '2019-02-28 15:30'
+    start = pd.Timestamp('2019-02-27')
+    minutes = 1
+    m, d = getbc_intraday(symbol, start=start, end=end, minutes=minutes, showUrl=False)
+    print(len(d))
 
 
 if __name__ == '__main__':
