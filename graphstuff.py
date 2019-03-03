@@ -81,12 +81,29 @@ class FinPlot(object):
         self.style = mplstyle
         self.randomStyle = False
         self.interactive = False
+        self.preferences = ['ib', 'mav', 'iex', 'bc']
 
         # Pieces of the file name for the next FinPlot graph, format and base should rarely change.
-        self.api = 'bc'
+        self.api = 'ib'
         self.ftype = '.png'
         self.format = "%H%M"
         self.base = 'trade'
+
+    def setApiPreferences(self, lprefs):
+        '''
+        Set the order of preference for which API to use to for stock chart data.
+        :params lprefs:An ordered list that may include the following members:
+        ['iex', 'mav', 'bc', 'ib'] The order will determine which to to try first and what order to 
+        proceed if the previous api failed to retrive the data.
+        '''
+        apis = ['iex', 'mav', 'bc', 'ib']
+        self.preferences = []
+        p = []
+        for api in lprefs:
+            if api in apis:
+                p.append(api)
+        self.preferences = p
+        self.api = self.preferences[0]
 
     def matchFont(self, nm, default='arial$'):
         '''
@@ -124,8 +141,7 @@ class FinPlot(object):
         n = pd.Timestamp.now() + dt.timedelta(0, 60*120)        # Adding 2 hours for NY time
 
         violatedRules = []
-        suggestedApis = ['mav', 'ib', 'bc', 'iex']
-
+        suggestedApis = self.preferences
         nopen = dt.datetime(n.year, n.month, n.day, 9, 30)
         nclose = dt.datetime(n.year, n.month, n.day, 16, 30)
 
@@ -276,6 +292,31 @@ class FinPlot(object):
 
         plt.subplots_adjust(left=0.08, bottom=0.04, right=0.86,
                             top=0.84, wspace=0.2, hspace=0.2)
+
+        # If the data is missing for a candle, the low registers as -1 and the chart boundaries
+        # go to 0 and the data is smushed at the top.
+        # It seems the iex data is on average much more sparse. So far with my test data, only iex
+        # requires this bit.
+        if save.find('iex') > 0:
+            if df_ohlc.low.min() == -1:
+                margin = .08
+                lows = df_ohlc.low.values
+                lows = sorted(lows)
+                print(lows[0], lows[1], lows[-2], lows[-1])
+                actuallow = -1
+                actualhigh = df_ohlc.high.max()
+                for i in range(len(lows)):
+                    if lows[i] > -1:
+                        actuallow = lows[i]
+                        break
+                diff = actualhigh - actuallow
+                plt.ylim(bottom=actuallow - (diff*margin))
+                plt.ylim(top=actualhigh+(diff*margin))
+
+
+
+
+
 
         # fig=plt.gcf()
         if self.interactive:
