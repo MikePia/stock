@@ -21,6 +21,25 @@ def getLastWorkDay(d=None):
     bizday = now - dt.timedelta(deltDays)
     return bizday
 
+def getPrevTuesWed(td):
+    '''
+    Utility method to get a probable market open day prior to td. The least likely
+    closed days are Tuesday and Wednesday. This will occassionally return  a closed
+    day but wtf.
+    :params td: A Datetime object
+    '''
+    deltdays = 7
+    if td.weekday() == 0:
+        deltdays = 5
+    elif td.weekday() < 3:
+        deltdays = 0
+    elif td.weekday() < 5:
+        deltdays = 2
+    else:
+        deltdays = 4
+    before = td - dt.timedelta(deltdays)
+    return before
+
 
 def notmain():
     '''run some local code'''
