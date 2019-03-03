@@ -200,7 +200,7 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
         msg = msg + f"Requested start of data: {start}\n"
         print(msg)
 
-    if start > df.index[-1]:
+    if start > df.index[0]:
         df = df.loc[df.index >= start]
         if len(df) == 0:
             msg = '\nWARNING: all data has been removed.'

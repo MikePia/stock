@@ -95,11 +95,10 @@ class TestMybarchart(unittest.TestCase):
             e = pd.Timestamp(start.year, start.month, start.day, 16, 1)
             if start > s and start < e:
                 self.assertEqual(df.index[0], start)
-            msg = f'\nInput: {end} \nTest:  <> {e} \nIndex{df.index[-1]}'
-            print(msg)
 
-            # Very noodly but barchart last index is always the next to the last time aka end - interval
-            # Which is a real pita to test
+            msg = f'\nInput: {end} \nTest:  <> {e} \nIndex{df.index[-1]}'
+            # print(msg)
+            # Very internal noodly but barchart last index is always the next to the last time aka end - interval
             if end and end > s and end < e:
                 end2 = end - pd.Timedelta(minutes=interval)
                 msg = f'\nInput: {end} \nTest:  {e} \nIndex: {df.index[-1]}'
