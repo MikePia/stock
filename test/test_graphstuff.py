@@ -4,10 +4,15 @@
 @creation_date: 2019-01-17
 '''
 import datetime as dt
+import os
+import types
 import unittest
 
 import numpy as np
+import pandas as pd
+
 from stock.graphstuff import FinPlot, dummyName
+
 from stock import utilities as util
 # pylint: disable = C0103
 
@@ -25,14 +30,14 @@ class TestGraphstuff(unittest.TestCase):
         start = dt.datetime(biz.year, biz.month, biz.day, 12, 30)
         end = dt.datetime(biz.year, biz.month, biz.day, 16, 1)
         minutes = 1
-        apis = ['iex', 'mav', 'bc', 'ib']
+        apis = fp.preferences
         symbol = 'SQ'
         for api in apis:
             fp.api = api
             result = fp.apiChooserList(start, end, api)
             if result[0]:
                 dummy, df = fp.apiChooser()(symbol, start=start, end=end, minutes=minutes, showUrl=True)
-                self.assertEqual(len(df.columns), 5, f"Failed to retrieve data with the {fp.api} api")
+                self.assertEqual(len(df.columns), 5, f"Failed to retrieve data with the {fp.api} api. Have you plugged it in?")
                 self.assertTrue(isinstance(df.index[0], dt.datetime),
                                 f'Failed to set index to datetime in {fp.api} api')
                 cols = ['open', 'high', 'low', 'close', 'volume']
@@ -109,14 +114,27 @@ class TestGraphstuff(unittest.TestCase):
             ['AMD', 2, '2019-01-18 08:32', '2019-01-18 09:41', 1],
             ['NFLX', 3, '2019-01-18 09:39', '2019-01-18 09:46', 1],
             ['NFLX', 4, '2019-01-18 09:47', '2019-01-18 09:51', 1]]
+
+        d = util.getPrevTuesWed(pd.Timestamp.now())
+        times = [['08:31', '09:38'],
+                ['08:32', '09:41' ],
+                ['09:39', '09:46' ],
+                ['09:47', '09:51']]
+        tickers = ['AAPL', 'AMD', 'NFLX', 'NFLX']
+        trades = []
+        for count, (tick, time) in enumerate(zip(tickers, times)):
+            start = d.strftime('%Y-%m-%d ') + time[0]
+            end = d.strftime('%Y-%m-%d ') + time[1]
+            trades.append([tick, count+1, start, end, 1])
+            # print (trades[-1])
         for trade in trades:
             start, end = fp.setTimeFrame(trade[2], trade[3], trade[4] )
             (dummy, rules, apilist) = fp.apiChooserList(trade[2], trade[3])
             print(f'{apilist}/n{rules}')
             for api in apilist:
                 fp.api = api
-                if api == 'iex':
-                    fp.interactive = True
+                # if api == 'iex':
+                #     fp.interactive = True
                 name = dummyName(fp, trade[0], trade[1], trade[2], trade[3])
                 try:
                     fp.graph_candlestick(trade[0], start, end, save=name)
@@ -125,7 +143,8 @@ class TestGraphstuff(unittest.TestCase):
                     print(f"While attempting to create {name}")
                     print(ex, ex.__class__.__name__)
                     print
-                fp.interactive = False
+                # fp.interactive = False
+                self.assertTrue(os.path.exists(name))
 
     def test_setTimeFrame(self):
         '''
@@ -172,7 +191,7 @@ def main():
     for name in dir(f):
         if name.startswith('test'):
             attr = getattr(f, name)
-            if isinstance(attr, type(f.test_apiChooser)):
+            if isinstance(attr, types.MethodType):
                 attr()
 
 
@@ -181,14 +200,14 @@ def notmain():
     Local run stuff for dev
     '''
     t = TestGraphstuff()
-    # t.test_apiChooser()
+    t.test_apiChooser()
     # t.test_dummyName()
     # t.test_graph_candlestick()
     # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
-    t.test_setTimeFrame()
+    # t.test_setTimeFrame()
 
 
 
 if __name__ == '__main__':
-    notmain()
-    # main()
+    # notmain()
+    main()
