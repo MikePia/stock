@@ -21,6 +21,13 @@ class TestGraphstuff(unittest.TestCase):
     Test functions and methods in the graphstuff module
     '''
 
+    def __init__(self, *args, **kwargs):
+        super(TestGraphstuff, self).__init__(*args, **kwargs)
+
+        ddiirr = os.path.dirname(__file__)
+        os.chdir(os.path.realpath(ddiirr + '/../'))
+
+
     def test_apiChooser(self):
         '''
         Test the method FinPlot.apiChooser for the same interface in each api
@@ -107,6 +114,7 @@ class TestGraphstuff(unittest.TestCase):
         Test the FinPlot.graph_candlestick method.
         '''
         fp = FinPlot()
+        # fp.interactive = True
         fp.randomStyle = True
 
         trades = [
@@ -116,6 +124,7 @@ class TestGraphstuff(unittest.TestCase):
             ['NFLX', 4, '2019-01-18 09:47', '2019-01-18 09:51', 1]]
 
         d = util.getPrevTuesWed(pd.Timestamp.now())
+        d = pd.Timestamp('2019-02-25')
         times = [['08:31', '09:38'],
                 ['08:32', '09:41' ],
                 ['09:39', '09:46' ],
@@ -137,14 +146,16 @@ class TestGraphstuff(unittest.TestCase):
                 #     fp.interactive = True
                 name = dummyName(fp, trade[0], trade[1], trade[2], trade[3])
                 try:
-                    fp.graph_candlestick(trade[0], start, end, save=name)
+                    fp.graph_candlestick(trade[0], start, end, minutes=2, save=name)
                 except Exception as ex:
                     print
                     print(f"While attempting to create {name}")
                     print(ex, ex.__class__.__name__)
                     print
                 # fp.interactive = False
-                self.assertTrue(os.path.exists(name))
+                cwd = os.getcwd()
+                msg = 'error creating '+ name + " IN ", cwd
+                self.assertTrue(os.path.exists(name), msg)
 
     def test_setTimeFrame(self):
         '''
@@ -200,14 +211,14 @@ def notmain():
     Local run stuff for dev
     '''
     t = TestGraphstuff()
-    t.test_apiChooser()
+    # t.test_apiChooser()
     # t.test_dummyName()
-    # t.test_graph_candlestick()
+    t.test_graph_candlestick()
     # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
     # t.test_setTimeFrame()
 
 
 
 if __name__ == '__main__':
-    # notmain()
-    main()
+    notmain()
+    # main()
