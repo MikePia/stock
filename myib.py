@@ -259,6 +259,8 @@ def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
     :params minutes: the length of the candle.
     return a DataFrame of the requested stuff
     '''
+    start = pd.Timestamp(start)
+    end = pd.Timestamp(end)
     if (end-start).days < 1:
         if ((end-start).seconds//3600) > 8:
             dur = '1 D'
@@ -297,6 +299,16 @@ def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
 
     # df = getIb_Hist(symbol, end=end, dur=dur, interval=minutes)
     # return df
+def isConnected():
+    host ='127.0.0.1'
+    port = 7496
+    clientId = 7878
+    ib = TestApp(host, port)
+    ib.connect(host, port, clientId)
+    connected = ib.isConnected()
+    if connected:
+        ib.disconnect()
+    return connected
 
 def main():
     '''test run'''
@@ -321,7 +333,11 @@ def main():
     # ddf = getib_intraday('JNJ', start=start, end=end, minutes=minutes )
     # print(ddf.columns)
 
+def notmain():
+    print("We are connected? ", isConnected())
+
 
 if __name__ == '__main__':
-    main()
+    # main()
+    notmain()
     
