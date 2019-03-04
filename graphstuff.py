@@ -88,6 +88,7 @@ class FinPlot(object):
         self.ftype = '.png'
         self.format = "%H%M"
         self.base = 'trade'
+        self.adjust = {'left': .12, 'bottom': .12, 'right': .88, 'top': .88}
 
     def setApiPreferences(self, lprefs):
         '''
@@ -148,16 +149,17 @@ class FinPlot(object):
         # Rule 1 Barchart will not return todays data till 16:30
         tradeday = pd.Timestamp(start.year, start.month, start.day)
         todayday = pd.Timestamp(n.year, n.month, n.day)
-        if tradeday == todayday and n < nclose:
+        if tradeday == todayday and n < nclose and 'bc' in suggestedApis:
             suggestedApis.remove('bc')
             violatedRules.append('Barchart will not return todays data till 16:30')
 
         # Rule 2 No support any charts greater than 7 days prior till today
         if n > start:
             delt = n - start
-            if delt.days > 7:
-                suggestedApis = []
-                violatedRules.append('No support any charts greater than 7 days prior till today')
+            if delt.days > 6 and 'mav' in suggestedApis:
+                suggestedApis.remove('mav')
+                lastday = n-pd.Timedelta(days=6)
+                violatedRules.append('AlphaVantage data before {} is unavailable.'.format(lastday.strftime("%b %d")))
 
         # Rule 3 No data is available for the future
         if start > n:
@@ -224,6 +226,12 @@ class FinPlot(object):
 
         return begin, end
 
+    def adjust(self, left=.12, bottom=.12, top=.99, right=.88):
+        self.adjust['left'] = left
+        self.adjust['right'] = right
+        self.adjust['top'] = top
+        self.adjust['bottom'] = bottom
+
         
     def graph_candlestick(self, symbol, start=None, end=None, minutes=1,
                           dtFormat="%H:%M", save='trade'):
@@ -254,14 +262,22 @@ class FinPlot(object):
         df['date'] = df['date'].map(mdates.date2num)
 
         df_ohlc = df[['date', 'open', 'high', 'low', 'close']]
-        # df_volume = df['volume']
+        df_volume = df[['date','volume']]
 
         ax1 = plt.subplot2grid((6, 1), (0, 0), rowspan=5, colspan=1)
         fig = plt.gcf()
+        ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1)
+        plt.ylabel('Volume')
 
         # width = ((60))//86400.0
         width = (minutes*35)/(3600 *24)
         candlestick_ohlc(ax1, df_ohlc.values, width, colorup='g')
+
+        for date, volume, dopen, close in zip(df_volume.date.values, df_volume.volume.values,
+                                         df_ohlc.open.values, df_ohlc.close.values): 
+            color = 'g' if close > dopen else 'k' if close == dopen else 'r'
+            ax2.bar(date, volume, width, color=color)
+   
         # fig = plt.Figure
 
         # fdict = {'family': 'sans serif', 'color': 'darkred', 'size': 15}
@@ -282,16 +298,17 @@ class FinPlot(object):
 
         # fdict = {'family': 'serif', 'color': 'darkred', 'size': 15}
         # ax1.text(df_ohlc.date[20], 340,'Animated Parrot Department', fontdict=fdict)
-        ax1.text(df_ohlc.date[20], df_ohlc.low.min(), 'Animated Parrot Department',
+        idx = int(len(df_ohlc.date)*.75)
+        ax1.text(df_ohlc.date[idx], df_ohlc.low.min(), 'ZeroSubstance',
                  fontdict={'fontname': self.matchFont('onyx'), 'size': 32, 'color': '161616'})
 
         plt.xlabel('I am an xlabel. what are you?')
         plt.ylabel('Prices over here')
         plt.title(f'{symbol} Daily chart\nWith empty weekends and holidays!')
     #     plt.legend()
-
-        plt.subplots_adjust(left=0.08, bottom=0.04, right=0.86,
-                            top=0.84, wspace=0.2, hspace=0.2)
+        ad = self.adjust
+        plt.subplots_adjust(left=ad['left'], bottom=ad['bottom'], right=ad['right'],
+                            top=ad['top'], wspace=0.2, hspace=0.2)
 
         # If the data is missing for a candle, the low registers as -1 and the chart boundaries
         # go to 0 and the data is smushed at the top.
@@ -310,8 +327,11 @@ class FinPlot(object):
                         actuallow = lows[i]
                         break
                 diff = actualhigh - actuallow
+                plt.gca().set_autoscale_on(False)
                 plt.ylim(bottom=actuallow - (diff*margin))
                 plt.ylim(top=actualhigh+(diff*margin))
+                plt.gca().set_adjustable('box')
+                print(save, '\nylimit is ', plt.ylim())
 
 
 
