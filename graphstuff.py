@@ -265,6 +265,7 @@ class FinPlot(object):
         df_volume = df[['date','volume']]
 
         ax1 = plt.subplot2grid((6, 1), (0, 0), rowspan=5, colspan=1)
+        plt.title(f'{symbol} Daily chart\nWith empty weekends and holidays!')
         fig = plt.gcf()
         ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1)
         plt.ylabel('Volume')
@@ -281,10 +282,13 @@ class FinPlot(object):
         # fig = plt.Figure
 
         # fdict = {'family': 'sans serif', 'color': 'darkred', 'size': 15}
+        
         for label in ax1.xaxis.get_ticklabels():
             label.set_rotation(-45)
         ax1.xaxis.set_major_formatter(mdates.DateFormatter(dtFormat))
         ax1.xaxis.set_major_locator(mticker.MaxNLocator(10))
+        maxvol = df_volume.volume.max()
+        ax2.set_yticks([.5*maxvol, maxvol])
 
         # print("=======", list(df_ohlc['close'])[-1])
 
@@ -304,7 +308,7 @@ class FinPlot(object):
 
         plt.xlabel('I am an xlabel. what are you?')
         plt.ylabel('Prices over here')
-        plt.title(f'{symbol} Daily chart\nWith empty weekends and holidays!')
+        
     #     plt.legend()
         ad = self.adjust
         plt.subplots_adjust(left=ad['left'], bottom=ad['bottom'], right=ad['right'],
@@ -313,13 +317,13 @@ class FinPlot(object):
         # If the data is missing for a candle, the low registers as -1 and the chart boundaries
         # go to 0 and the data is smushed at the top.
         # It seems the iex data is on average much more sparse. So far with my test data, only iex
-        # requires this bit.
+        # requires this bit.  And it seemed to work the first day but its not working now.
         if save.find('iex') > 0:
             if df_ohlc.low.min() == -1:
                 margin = .08
                 lows = df_ohlc.low.values
                 lows = sorted(lows)
-                print(lows[0], lows[1], lows[-2], lows[-1])
+                # print(lows[0], lows[1], lows[-2], lows[-1])
                 actuallow = -1
                 actualhigh = df_ohlc.high.max()
                 for i in range(len(lows)):
@@ -331,7 +335,7 @@ class FinPlot(object):
                 plt.ylim(bottom=actuallow - (diff*margin))
                 plt.ylim(top=actualhigh+(diff*margin))
                 plt.gca().set_adjustable('box')
-                print(save, '\nylimit is ', plt.ylim())
+                # print(save, '\nylimit is ', plt.ylim())
 
 
 
