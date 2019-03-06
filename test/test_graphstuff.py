@@ -216,7 +216,7 @@ class TestGraphstuff(unittest.TestCase):
                 delt = odate - s
                 delt2 = odate - s2
                 self.assertLess(delt.seconds, 3600)
-                self.assertLess(delt2.seconds, 3600 * 3.1)
+                self.assertLess(delt2.seconds, 3600 * 3.51)
             if early < opening:
                 self.assertEqual(s3, opening)
             if late > closing:
@@ -244,9 +244,9 @@ def notmain():
     t = TestGraphstuff()
     # t.test_apiChooser()
     # t.test_dummyName()
-    t.test_graph_candlestick()
+    # t.test_graph_candlestick()
     # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
-    # t.test_setTimeFrame()
+    t.test_setTimeFrame()
 
 
 
