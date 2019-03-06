@@ -82,7 +82,7 @@ def getLimits():
     # print('Your api key is:', getKey('alphavantage')['key'])
     print('Limits 5 calls per minute, 500 per day. (Is it time to implement caching?')
     print("They say these are realtime. Need to test it against ib api.")
-    print("Intraday goes back 1 week (I think).")
+    print("Intraday goes back 1 week.")
     print("Strangely, currently I find 1 min data goes 1 week")
     print("5 min data goes back about 25 days")
     print("15 and 40 min data goes to the beginning of last month or say 50 days")
@@ -93,32 +93,38 @@ def getLimits():
 
 def ni(i):
     '''
-    Utility to normalizee the the interval parameter.
-        :params:i: ['1min', '5min', '15min', '30min', '60min', 'daily', 'weekly', 'monthly']
-                   ['1', '5', '15', '30', '60', 'd', 'w', 'm', 1, 5, 15, 30, 60]
-        :return:   an entry from the 1st list above or None
+    Retrieve the correct param for Alphavantage. Limited to minute charts up to 60 minute candle.
+    Return also the int values for the request for resampling and the candle interval as an int
+    :params i: an int representing a  requested candle size. If i is below 1 or above 120 return
+        '1min' and '60min' and no resampling
+    :return (bresample, (a,b,c)): (bool, (str, int, int)).
+        :params bresample: a bool indicating the requested interval will need to be resampled
+        :params a: A str with the mav param for the REST api
+        :params b: An int representing the mav interval
+        :params c: an int representing the requested interval
     '''
-    if i in INTERVAL:
-        return i
-    if i in ['1', '5', '15', '30', '60', 'd', 'w', 'm', 1, 5, 15, 30, 60]:
-        return {'1': '1min', '5': '5min', '15': '15min', '30': '30min', '60': '60min',
-                'd': 'daily', 'w': 'weekly', 'm': 'monthly', 1: '1min', 5: '5min',
-                15: '15min', 30: '30min', 60: '60min'
-                }[i]
+    resamp = False
+    if i < 1:
+        i = 1
+    elif i > 120:
+        i = 60
+    if i in [1, 5, 15, 30, 60]:
+        return resamp, {1: ('1min', 1, 1), 5: ('5min', 5, 5), 15: ('15min', 15, 15), 30: ('30min', 30, 30), 60: ('60min', 60, 60)}[i]
+    resamp = True                
     if isinstance(i, int):
-        ret = '60min'
+        ret = '60min', 60, i
         if i < 5:
-            ret = '1min'
+            ret = ('1min', 1, i)
         elif i < 15:
-            ret = '5min'
+            ret = ('5min', 5, i)
         elif i < 30:
-            ret = '15min'
+            ret = ('15min', 15, i)
         elif i < 60:
-            ret = '30min'
-        return ret
+            ret = ('30min', 30, i)
+        return resamp, ret
     print(
-        f"interval={i} is not supported by alphavantage. Setting to 1min candle.")
-    return '1min'
+        f"interval={i} is not supported by alphavantage. Setting to 1min candle as if it were requested")
+    return False, ('1min', 1, 1)
 
 RETRY = 3
 class Retries(object):
@@ -140,7 +146,8 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
     :params symb: The stock ticker
     :params start: A date time string or datetime object to indicate the beginning time.
     :params end: A datetime string or datetime object to indicate the end time.
-    :params minutes: An int for the candle time, 5 minute, 15 minute etc, only specific intervals are recognized
+    :params minutes: An int for the candle time, 5 minute, 15 minute etc. If minutes is not one of
+        Alphavantage's accepted times, we will resample.
 
     :returns: A DataFrame of minute indexed by time with columns open, high, low
          low, close, volume and indexed by pd timestamp. If not specified, this
@@ -150,8 +157,11 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
 
     start = pd.to_datetime(start) if start else None
     end = pd.to_datetime(end) if end else None
+    if not minutes:
+        minutes = 1
 
-    minutes = ni(minutes)
+    original_minutes = minutes
+    resamp, (minutes, interval, original_minutes) = ni(minutes)
 
     params = {}
     params['function'] = FUNCTION['intraday']
@@ -210,7 +220,44 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
                 f'Your end date ({end}) is before the earliest first date ({df.index[0]}).')
             return None, pd.DataFrame()
 
+    df.rename(columns={'1. open': 'open',
+                       '2. high': 'high',
+                       '3. low': 'low',
+                       '4. close': 'close',
+                       '5. volume': 'volume'}, inplace=True)
+
+    df.open = pd.to_numeric(df.open)
+    df.high = pd.to_numeric(df.high)
+    df.low = pd.to_numeric(df.low)
+    df.close = pd.to_numeric(df.close)
+    df.volume = pd.to_numeric(df.volume)
+
+    # Alphavantage indexes the candle ends as a time index. IB, and others, index candle
+    # beginnings. To make the APIs harmonious, we will transalte the index time down by
+    # one interval. I think the translation will always be the interval sent to mav. So
+    # '1min' will translate down 1 minute etc. We saved the translation as a return
+    # from ni().
+    # for i, row in df.iterrows():
+    delt = pd.Timedelta(minutes=interval)
+    df.index = df.index - delt
+    #     df.index[i] = df.index[i] - delt
+
+    if resamp:
+        srate = f'{original_minutes}T'
+        df_ohlc = df[['open']].resample(srate).first()
+        df_ohlc['high'] = df[['high']].resample(srate).max()
+        df_ohlc['low'] = df[['low']].resample(srate).min()
+        df_ohlc['close'] = df[['close']].resample(srate).last()
+        df_ohlc['volume'] = df[['volume']].resample(srate).sum()
+        df = df_ohlc.copy()
+
+    # Trim the data to the requested time frame
     if start:
+        # Remove preemarket hours from the start variable
+        starttime = start.time()
+        opening = dt.time(9,30)
+        if opening > starttime:
+            start = pd.Timestamp(start.year, start.month, start.day, 9, 30)
         if start > df.index[0]:
             df = df[df.index >= start]
             l = len(df)
@@ -228,17 +275,7 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
                     f"\nWARNING: you have sliced off all the data with the end date {end}")
                 return metaj, pd.DataFrame()
 
-    df.rename(columns={'1. open': 'open',
-                       '2. high': 'high',
-                       '3. low': 'low',
-                       '4. close': 'close',
-                       '5. volume': 'volume'}, inplace=True)
-
-    df.open = pd.to_numeric(df.open)
-    df.high = pd.to_numeric(df.high)
-    df.low = pd.to_numeric(df.low)
-    df.close = pd.to_numeric(df.close)
-    df.volume = pd.to_numeric(df.volume)
+    
 
     return metaj, df
 

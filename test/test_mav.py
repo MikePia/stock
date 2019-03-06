@@ -33,7 +33,7 @@ class TestMyalphavantage(unittest.TestCase):
         # longBefAft = dt.datetime(longBef.year, longBef.month, longBef.day, 16, 1)
 
         # dateArray = [(biz, bizAft), (biz, None), (None, bizAft) ]
-        minutes = '1min'
+        minutes = 2
 
         dateArray = [(bizMorn, bizAft),
                      (bizMorn, None),
@@ -75,11 +75,15 @@ class TestMyalphavantage(unittest.TestCase):
 
             # If the requested start time is before 9:31, start should be 9:31
             d = df.index[0]
-            expected = dt.datetime(d.year, d.month, d.day, 9, 31)
+            expected = dt.datetime(d.year, d.month, d.day, 9, 30)
             if start < expected:
                 self.assertEqual(d, expected)
             else:
-                self.assertEqual(d, start)
+                # The start should be within the amount of the candle length
+                # if d != start:
+                delt = pd.Timedelta(minutes=minutes)
+                delt2 = d - start if d > start else start - d
+                self.assertLessEqual(delt2, delt)
 
             # Could add some tests for what happens when request is for today during market hours
 
@@ -124,19 +128,31 @@ class TestMyalphavantage(unittest.TestCase):
         '''
         Test the utility for mav
         '''
-        self.assertEqual(mav.ni(3), '1min')
-        self.assertEqual(mav.ni(45), '30min')
-        self.assertEqual(mav.ni(112), '60min')
-        self.assertEqual(mav.ni(11), '5min')
-        self.assertEqual(mav.ni(0), '1min')
-        self.assertEqual(mav.ni('gobbledegook'), '1min')
+        results = [
+            (True, ('1min', 1, 3)),
+            (True, ('30min', 30, 45)),
+            (True, ('60min', 60, 112)),
+            (True, ('5min', 5, 11)),
+            (False, ('1min', 1, 1)),
+            (False, ('30min', 30, 30)),
+        ]
+        for r in results:
+            res = mav.ni(r[1][2])
+            self.assertEqual(res, r)
+
+        res = mav.ni(-42)
+        self.assertEqual(res, (False,('1min', 1, 1)))
+
+
+        res = mav.ni(450)
+        self.assertEqual(res, (False,('60min', 60, 60)))
+
 
 def notmain():
     '''Run some local code for dev'''
     m = TestMyalphavantage()
     m.test_getmav_intraday()
-
-
     # m.test_ni()
+
 if __name__ == '__main__':
     notmain()
