@@ -5,6 +5,7 @@
 '''
 import datetime as dt
 import os
+import random
 import types
 import unittest
 
@@ -12,9 +13,19 @@ import numpy as np
 import pandas as pd
 
 from stock.graphstuff import FinPlot, dummyName
+import stock.myib as ib
 
 from stock import utilities as util
 # pylint: disable = C0103
+
+
+def getTicker():
+    '''
+    Get a random ticker symbol
+    '''
+    tickers = ['SQ', 'AAPL', 'TSLA', 'ROKU', 'NVDA', 'NUGT',
+               'MSFT', 'CAG', 'ACRS', 'FRED', 'NFLX', 'MU', 'AAPL']
+    return tickers[random.randint(0,12)]
 
 class TestGraphstuff(unittest.TestCase):
     '''
@@ -108,6 +119,27 @@ class TestGraphstuff(unittest.TestCase):
             self.assertTrue(n is None, 'Failed to raise ValueError')
         except ValueError:
             pass
+    def makeupEntries(self, symbol, start, end, minutes, fp):
+        meta, df = ib.getib_intraday(symbol, start, end, minutes)
+        entries = []
+        exits = []
+        for i in range(random.randint(2,9)):
+            candle=random.randint(0, len(df)-1)
+            high = df.iloc[candle].high
+            low = df.iloc[candle].low
+            entry = ((high - low) * random.random()) + low
+            x = int(minutes*60 * random.random())
+            tix = df.index[candle] 
+            tix = tix + pd.Timedelta(seconds=x)
+            
+            if random.random() < .35:
+                entries.append([entry, candle, minutes, tix])
+            else:
+                exits.append([entry, candle, minutes, tix])
+        fp.entries = entries
+        fp.exits = exits
+
+
 
     def test_graph_candlestick(self):
         '''
@@ -117,19 +149,23 @@ class TestGraphstuff(unittest.TestCase):
         # fp.interactive = True
         fp.randomStyle = True
 
-        trades = [
-            ['AAPL', 1, '2019-01-18 08:31', '2019-01-18 09:38', 1],
-            ['AMD', 2, '2019-01-18 08:32', '2019-01-18 09:41', 1],
-            ['NFLX', 3, '2019-01-18 09:39', '2019-01-18 09:46', 1],
-            ['NFLX', 4, '2019-01-18 09:47', '2019-01-18 09:51', 1]]
+        # trades = [
+        #     ['AAPL', 1, '2019-01-18 08:31', '2019-01-18 09:38', 1],
+        #     ['AMD', 2, '2019-01-18 08:32', '2019-01-18 09:41', 1],
+        #     ['NFLX', 3, '2019-01-18 09:39', '2019-01-18 09:46', 1],
+        #     ['NFLX', 4, '2019-01-18 09:47', '2019-01-18 09:51', 1]]
 
         d = util.getPrevTuesWed(pd.Timestamp.now())
-        d = pd.Timestamp('2019-02-25')
+        # d = pd.Timestamp('2019-02-25')
         times = [['08:31', '09:38'],
                 ['08:32', '09:41' ],
-                ['09:39', '09:46' ],
-                ['09:47', '09:51']]
-        tickers = ['AAPL', 'AMD', 'NFLX', 'NFLX']
+                ['09:39', '12:46' ],
+                ['09:47', '13:51']]
+
+        tickers = []
+        for i in range(4):
+            tickers.append(getTicker()) 
+
         trades = []
         for count, (tick, time) in enumerate(zip(tickers, times)):
             start = d.strftime('%Y-%m-%d ') + time[0]
@@ -140,19 +176,14 @@ class TestGraphstuff(unittest.TestCase):
             start, end = fp.setTimeFrame(trade[2], trade[3], trade[4] )
             (dummy, rules, apilist) = fp.apiChooserList(trade[2], trade[3])
             print(f'{apilist}/n{rules}')
+            minutes = 2
+            self.makeupEntries(trade[0], start, end, minutes, fp)
             for api in apilist:
                 fp.api = api
                 # if api == 'iex':
                 #     fp.interactive = True
                 name = dummyName(fp, trade[0], trade[1], trade[2], trade[3])
-                try:
-                    fp.graph_candlestick(trade[0], start, end, minutes=2, save=name)
-                except Exception as ex:
-                    print
-                    print(f"While attempting to create {name}")
-                    print(ex, ex.__class__.__name__)
-                    print
-                # fp.interactive = False
+                fp.graph_candlestick(trade[0], start, end, minutes=minutes, save=name)
                 cwd = os.getcwd()
                 msg = 'error creating '+ name + " IN ", cwd
                 self.assertTrue(os.path.exists(name), msg)
