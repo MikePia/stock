@@ -72,6 +72,7 @@ def dummyName(fp, symb, tradenum, begin, end, outdir = 'out'):
     return name
 
 
+
 class FinPlot(object):
     '''
     Plot stock charts using single day minute interval charts
@@ -88,7 +89,10 @@ class FinPlot(object):
         self.ftype = '.png'
         self.format = "%H%M"
         self.base = 'trade'
-        self.adjust = {'left': .12, 'bottom': .12, 'right': .88, 'top': .88}
+        self.adjust = dict()
+        self.setadjust()
+        self.entries = []
+        self.exits = []
 
     def setApiPreferences(self, lprefs):
         '''
@@ -214,11 +218,12 @@ class FinPlot(object):
         begin = begin - dt.timedelta(0, xtime*60)
         end = end + dt.timedelta(0, xtime*60)
 
-        
+        # If beginning is before 10:15-- show the opening
         mopen = dt.datetime(beginday.year, beginday.month, beginday.day, 9, 30)
+        orbu = dt.datetime(beginday.year, beginday.month, beginday.day, 10, 15)
         mclose = dt.datetime(endday.year, endday.month, endday.day, 16, 0)
 
-        begin = mopen if begin <= beginday else begin
+        begin = mopen if begin <= orbu else begin
         end = mclose if end >= endday else end
 
         begin = mopen if mopen > begin else begin
@@ -226,7 +231,7 @@ class FinPlot(object):
 
         return begin, end
 
-    def adjust(self, left=.12, bottom=.12, top=.99, right=.88):
+    def setadjust(self, left=.12, bottom=.17, top=.88, right=.88):
         self.adjust['left'] = left
         self.adjust['right'] = right
         self.adjust['top'] = top
@@ -265,28 +270,49 @@ class FinPlot(object):
         df_volume = df[['date','volume']]
 
         ax1 = plt.subplot2grid((6, 1), (0, 0), rowspan=5, colspan=1)
-        plt.title(f'{symbol} Daily chart\nWith empty weekends and holidays!')
+        ttimes = start.strftime("%a %b %d %H:%M-->") + end.strftime('%H:%M')
+        plt.title(f'{symbol} Daily chart\n{self.style}, {ttimes}')
         fig = plt.gcf()
         ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1)
         plt.ylabel('Volume')
 
         # width = ((60))//86400.0
         width = (minutes*35)/(3600 *24)
-        candlestick_ohlc(ax1, df_ohlc.values, width, colorup='g')
+        candlestick_ohlc(ax1, df_ohlc.values, width, colorup='g', alpha=.75)
 
         for date, volume, dopen, close in zip(df_volume.date.values, df_volume.volume.values,
                                          df_ohlc.open.values, df_ohlc.close.values): 
             color = 'g' if close > dopen else 'k' if close == dopen else 'r'
             ax2.bar(date, volume, width, color=color)
+
+        for entry in self.entries:
+            e = entry[0]
+            candle = entry[1]
+            tix = entry[3]
+
+            markersize = 12 - ((len(df_ohlc)-25)/len(df_ohlc)/.18)
+            # print(f'length : {len(df_ohlc)}, markersize {markersize}')
+            l = ax1.plot(df_ohlc.date[candle], e, marker='^', color='g', markersize=markersize)
+            plt.setp(l, markersize=markersize)
+
+        for exit in self.exits:
+            e = exit[0]
+            candle = exit[1]
+            tix = exit[3]
+
+            markersize = 15 - ((len(df_ohlc)-30)/len(df_ohlc)/.13)
+            # print(f'length : {len(df_ohlc)}, markersize {markersize}')
+            l = ax1.plot(df_ohlc.date[candle], e, marker='v', color='r', markersize=markersize)
+            plt.setp(l, markersize=markersize)
    
         # fig = plt.Figure
 
         # fdict = {'family': 'sans serif', 'color': 'darkred', 'size': 15}
         
-        for label in ax1.xaxis.get_ticklabels():
+        for label in ax2.xaxis.get_ticklabels():
             label.set_rotation(-45)
-        ax1.xaxis.set_major_formatter(mdates.DateFormatter(dtFormat))
-        ax1.xaxis.set_major_locator(mticker.MaxNLocator(10))
+        ax2.xaxis.set_major_formatter(mdates.DateFormatter(dtFormat))
+        ax2.xaxis.set_major_locator(mticker.MaxNLocator(10))
         maxvol = df_volume.volume.max()
         ax2.set_yticks([.5*maxvol, maxvol])
 
@@ -306,8 +332,8 @@ class FinPlot(object):
         ax1.text(df_ohlc.date[idx], df_ohlc.low.min(), 'ZeroSubstance',
                  fontdict={'fontname': self.matchFont('onyx'), 'size': 32, 'color': '161616'})
 
-        plt.xlabel('I am an xlabel. what are you?')
-        plt.ylabel('Prices over here')
+        plt.xlabel(f'{len(df.index)} candles, msize: {int(markersize)}, cwidth: {int(width*100000)}')
+        # plt.ylabel('Prices over here')
         
     #     plt.legend()
         ad = self.adjust
