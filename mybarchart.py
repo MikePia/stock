@@ -11,7 +11,7 @@ import requests
 import pandas as pd
 from stock.picklekey import getKey as getReg
 from stock import utilities as util
-# pylint: disable = C0103
+# pylint: disable = C0103, R0912, R0914, R0915
 APIKEY = getReg('barchart')['key']
 
 # https://marketdata.websol.barchart.com/getHistory.json?apikey={APIKEY}&symbol=AAPL&type=minutes&startDate=20181001&maxRecords=100&interval=5&order=asc&sessionFilter=EFK&splits=true&dividends=true&volume=sum&nearby=1&jerq=true
@@ -103,18 +103,18 @@ def setParams(symbol, minutes, startDay):
     params['jerq'] = 'true'
     return params
 
-# Not getting the current date-- maybe after the market closes? 
+# Not getting the current date-- maybe after the market closes?
 def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
     '''
     Note that getHistory will return previous day's prices until 15 minutes after the market
         closes. We will generate a warning if our start or end date differ from the date of the
         response. Given todays date at 14:00, it will retrive the previous business days stuff.
         Given not start parameter, we will return data for the last weekday. Today or earlier.
-        We will return everything we between start and end. It may be incomplete. 
+        We will return everything we between start and end. It may be incomplete.
         Its now limiting yesterdays data. At 3:00, the latest I get is yesterday
         up to 12 noon.
     Retrieve candle data measured in minutes as given in the minutes parameter
-    :params start: A datetime object or time string to indicate the begin time for the data. By 
+    :params start: A datetime object or time string to indicate the begin time for the data. By
         default, start will be set to the most recent weekday at market open.
     :params end: A datetime object or time string to indicate the end time for the data
     :params minutes: An int for the candle time, 5 minute, 15 minute etc
@@ -157,8 +157,7 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
 
     result = response.json()
     if not result['results']:
-        print(
-            'WARNING: Failed to retrieve any data. Barchart sends the following greeting:')
+        print('WARNING: Failed to retrieve any data. Barchart sends the following greeting:')
         print(result['status'])
         return result['status'], pd.DataFrame()
 
@@ -171,12 +170,12 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
     df = pd.DataFrame(result[keys[1]])
 
     # HACKALERT hacky code alert Retrieve the tz hour and minutes  from the funky timestamp.
-    # Subtract Timedelta from to_datetime
-    hour = int(df.timestamp[0][20:-3])
-    seconds = int(df.timestamp[0][23:])*60
+    # Subtract Timedelta from to_datetime.. Not sure about this code ...
+    # hour = int(df.timestamp[0][20:-3])
+    # seconds = int(df.timestamp[0][23:])*60
 
-    # there has got to be a better way to do this-- 
-    for i, row in df.iterrows():
+    # there has got to be a better way to do this--
+    for i, dummy in df.iterrows():
         d = pd.to_datetime(df.at[i, 'timestamp'])
         newd = pd.Timestamp(d.year, d.month, d.day, d.hour, d.minute, d.second)
         df.at[i, 'timestamp'] = newd
@@ -202,7 +201,8 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
 
     if start > df.index[0]:
         df = df.loc[df.index >= start]
-        if len(df) == 0:
+        lendf = len(df)
+        if lendf == 0:
             msg = '\nWARNING: all data has been removed.'
             msg = msg + f'\nThe Requested start was({start}).'
             print(msg)
@@ -214,12 +214,13 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
     if end < df.index[-1]:
         df = df.loc[df.index <= end]
         # If we just sliced off all our data. Set warning message
-        if len(df) == 0:
+        lendf = len(df)
+        if lendf == 0:
             msg = msg + '\nWARNING: all data has been removed.'
             msg = msg + f'\nThe Requested end was({end}).'
             meta['code2'] = 199
             meta['message'] = meta['message'] + msg
-            print (meta)
+            print(meta)
             return meta, df
 
     # Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[]
@@ -234,21 +235,9 @@ def main():
     end = '2019-02-28 15:30'
     start = pd.Timestamp('2019-02-27')
     minutes = 1
-    m, d = getbc_intraday(symbol, start=start, end=end, minutes=minutes, showUrl=False)
+    dummy, d = getbc_intraday(symbol, start=start, end=end, minutes=minutes, showUrl=showUrl)
     print(len(d))
 
 
 if __name__ == '__main__':
     main()
-
-
-# graph_candlestick("AAPL", start=start, dtFormat='%m %d', st=s )
-#     import random
-# # tdy = dt.datetime.today()
-# start='2019-11-20'
-# r = random.randint(0, len(style.available))
-# s = style.available[r]
-# print(s)
-
-# classic, greyscale, seaborn-poster, bmh, dark_background
-# print(getApiKey())

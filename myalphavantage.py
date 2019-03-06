@@ -110,7 +110,7 @@ def ni(i):
         i = 60
     if i in [1, 5, 15, 30, 60]:
         return resamp, {1: ('1min', 1, 1), 5: ('5min', 5, 5), 15: ('15min', 15, 15), 30: ('30min', 30, 30), 60: ('60min', 60, 60)}[i]
-    resamp = True                
+    resamp = True
     if isinstance(i, int):
         ret = '60min', 60, i
         if i < 5:
@@ -127,7 +127,7 @@ def ni(i):
     return False, ('1min', 1, 1)
 
 RETRY = 3
-class Retries(object):
+class Retries:
     '''Number of retries when AV returns a 1 minute violation'''
     def __init__(self):
         self.retries = RETRY
@@ -255,7 +255,7 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
     if start:
         # Remove preemarket hours from the start variable
         starttime = start.time()
-        opening = dt.time(9,30)
+        opening = dt.time(9, 30)
         if opening > starttime:
             start = pd.Timestamp(start.year, start.month, start.day, 9, 30)
         if start > df.index[0]:
@@ -274,8 +274,6 @@ def getmav_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
                 print(
                     f"\nWARNING: you have sliced off all the data with the end date {end}")
                 return metaj, pd.DataFrame()
-
-    
 
     return metaj, df
 

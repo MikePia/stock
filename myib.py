@@ -4,18 +4,20 @@ Implement historicalData method from the IB API
 @creation_date: 1/2/19
 '''
 
-import sys
+# import sys
 import datetime as dt
 from threading import Thread
 import queue
 import pandas as pd
 
-from ibapi import wrapper
+from ibapi import wrapper 
 from ibapi.client import EClient
 
 # from ibapi.wrapper import EWrapper
 from ibapi.common import TickerId
 from ibapi.contract import Contract
+
+from stock.utilities import getLastWorkDay
 
 
 # import time
@@ -248,17 +250,24 @@ class TestApp(TestWrapper, TestClient):
             return pd.DataFrame()
 
 
-def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
+def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
     '''
     An interface API to match the other getters. In this case its a substantial
     dumbing down of the capabilities to our one specific need. Output will be limited
     to minute candles (1,5,10,7 whatever) within a single day.
     :params symbol: The stock to get
-    :params start: A timedate object or time string for when to start.
-    :params end: a timedate object or time string for when to end.
-    :params minutes: the length of the candle.
-    return a DataFrame of the requested stuff
+    :params start: A timedate object or time string for when to start. Defaults to the most recent
+        weekday at open.
+    :params end: A timedate object or time string for when to end. Defaults to the most recent biz
+        day at close
+    :params minutes: The length of the candle. Defaults to 1 minute
+    :return (length, df):A DataFrame of the requested stuff and its length
     '''
+    biz = getLastWorkDay()
+    if not end:
+        end = pd.Timestamp(biz.year, biz.month, biz.day, 16, 0)
+    if not start:
+        start = pd.Timestamp(biz.year, biz.month, biz.day, 9, 30)
     start = pd.Timestamp(start)
     end = pd.Timestamp(end)
     if (end-start).days < 1:
@@ -272,10 +281,10 @@ def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
         dur = f'{(end-start).days} D'
         print('Requests longer than 6 days are not supported.')
         return pd.DataFrame([], [])
-    
+
     # if the end = 9:31 and dur = 3 minutes, ib will retrieve a start of the preceding day @ 15:58
-    # This is unique behavior in implemeted apis. We will just let ib do whatever and cut off the 
-    # beginning below. 
+    # This is unique behavior in implemeted apis. We will just let ib do whatever and cut off the
+    # beginning below.
 
     symb = symbol
     # daDate = end
@@ -285,7 +294,8 @@ def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
     # def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
     df = ib.getHistorical(symb, end=end, dur=dur,
                           interval=interval, exchange='NASDAQ')
-    if len(df) == 0:
+    lendf = len(df)
+    if lendf == 0:
         return 0, df
 
     # df.set_index(df.date)
@@ -300,7 +310,8 @@ def getib_intraday(symbol, start, end, minutes, showUrl='dummy'):
     # df = getIb_Hist(symbol, end=end, dur=dur, interval=minutes)
     # return df
 def isConnected():
-    host ='127.0.0.1'
+    '''Call TestApp.isConnected and return result'''
+    host = '127.0.0.1'
     port = 7496
     clientId = 7878
     ib = TestApp(host, port)
@@ -314,26 +325,12 @@ def main():
     '''test run'''
     start = dt.datetime(2019, 1, 15, 9, 19)
     end = dt.datetime(2019, 1, 15, 15, 5)
-    minutes='1 min'
+    minutes = '1 min'
     x, ddf = getib_intraday('SQ', start, end, minutes)
-    # ddf = getIb_Hist('W', end=end, dur='14400 S', interval='30 mins')
-    # print(f'Requested {start} 
-    # /... {end}')
-    # print(f'Received  {ddf.index[0]} .../... {ddf.index[-1]}')
-    # print(f'Index type: {type(ddf.index[0])}')
-    # cols = ddf.columns
-    # for col in cols:
-    #     # print(f"Col types: {col}: {type([df[col][0])}")
-    #     print(f'{col} {type(ddf[col][0])}')
-    # print(ddf.head(3))
-    print(ddf.tail(3))
-
-
-
-    # ddf = getib_intraday('JNJ', start=start, end=end, minutes=minutes )
-    # print(ddf.columns)
+    print(x, ddf.tail(3))
 
 def notmain():
+    '''Run some local code'''
     print("We are connected? ", isConnected())
 
 

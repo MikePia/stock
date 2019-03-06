@@ -5,7 +5,8 @@ single day minute charts (1,5, 10 min etc)
 
 @creation_date: 1/13/19
 '''
-import os, re
+import os
+import re
 import datetime as dt
 import random
 import pandas as pd
@@ -31,7 +32,9 @@ from stock import myib as ib
 
 
 FILL = 2
-def dummyName(fp, symb, tradenum, begin, end, outdir = 'out'):
+
+
+def dummyName(fp, symb, tradenum, begin, end, outdir='out'):
     '''
     This is a method function for use in developement. It will probably move up in the
         heirarchy to the inclusive program. Instructive to see all the elements that need
@@ -52,28 +55,30 @@ def dummyName(fp, symb, tradenum, begin, end, outdir = 'out'):
         int(tradenum)
         tradenum = str(tradenum).zfill(FILL)
     except ValueError:
-        raise ValueError("Unable to convert tradenum to string representation of an int")
+        raise ValueError(
+            "Unable to convert tradenum to string representation of an int")
 
     try:
         begin = pd.Timestamp(begin)
     except ValueError:
-        raise ValueError(f'(begin {begin}) cannot be converted to a datetime object')
+        raise ValueError(
+            f'(begin {begin}) cannot be converted to a datetime object')
 
     try:
         end = pd.Timestamp(end)
     except ValueError:
-        raise ValueError(f'(end {end}) cannot be converted to a datetime object')
+        raise ValueError(
+            f'(end {end}) cannot be converted to a datetime object')
     begin = begin.strftime(fp.format)
     end = end.strftime(fp.format)
     name = f'{fp.base}{tradenum}_{symb}_{begin}_{end}_{fp.api}{fp.ftype}'
 
-    name  = os.path.join(outdir, name)
+    name = os.path.join(outdir, name)
 
     return name
 
 
-
-class FinPlot(object):
+class FinPlot:
     '''
     Plot stock charts using single day minute interval charts
     '''
@@ -82,7 +87,7 @@ class FinPlot(object):
         self.style = mplstyle
         self.randomStyle = False
         self.interactive = False
-        self.preferences = ['ib', 'mav', 'iex', 'bc']
+        self.preferences = ['ib', 'mav', 'bc', 'iex']
 
         # Pieces of the file name for the next FinPlot graph, format and base should rarely change.
         self.api = 'ib'
@@ -98,7 +103,7 @@ class FinPlot(object):
         '''
         Set the order of preference for which API to use to for stock chart data.
         :params lprefs:An ordered list that may include the following members:
-        ['iex', 'mav', 'bc', 'ib'] The order will determine which to to try first and what order to 
+        ['iex', 'mav', 'bc', 'ib'] The order will determine which to to try first and what order to
         proceed if the previous api failed to retrive the data.
         '''
         apis = ['iex', 'mav', 'bc', 'ib']
@@ -120,7 +125,7 @@ class FinPlot(object):
         '''
         nm = nm.lower()
         retList = []
-        g = list(set([f.name for f in fm.fontManager.ttflist]))
+        g = list({f.name for f in fm.fontManager.ttflist})
         g.sort()
         for gg in g:
             if re.search(nm, gg.lower()):
@@ -131,13 +136,13 @@ class FinPlot(object):
 
     def apiChooserList(self, start, end, api=None):
         '''
-        Given the current list of apis as mav, bc, iex, and ib, determine if the given api will 
-            likely return data for the given times. 
-        :params start: A datetime object or time stamp indicating the intended start of the chart. 
+        Given the current list of apis as mav, bc, iex, and ib, determine if the given api will
+            likely return data for the given times.
+        :params start: A datetime object or time stamp indicating the intended start of the chart.
         :params end: A datetime object or time stamp indicating the intended end of the chart.
-        :params api: Param must be one of mab, bc, iex, or ib. If given, the return value in 
+        :params api: Param must be one of mab, bc, iex, or ib. If given, the return value in
             (api, x, x)[0] will reflect the bool result of the api
-        :return: (bool, rulesviolated, suggestedStocks) The first entry is only valid if api is 
+        :return: (bool, rulesviolated, suggestedStocks) The first entry is only valid if api is
             an argument.
 
         '''
@@ -147,7 +152,7 @@ class FinPlot(object):
 
         violatedRules = []
         suggestedApis = self.preferences
-        nopen = dt.datetime(n.year, n.month, n.day, 9, 30)
+        # nopen = dt.datetime(n.year, n.month, n.day, 9, 30)
         nclose = dt.datetime(n.year, n.month, n.day, 16, 30)
 
         # Rule 1 Barchart will not return todays data till 16:30
@@ -155,7 +160,8 @@ class FinPlot(object):
         todayday = pd.Timestamp(n.year, n.month, n.day)
         if tradeday == todayday and n < nclose and 'bc' in suggestedApis:
             suggestedApis.remove('bc')
-            violatedRules.append('Barchart will not return todays data till 16:30')
+            violatedRules.append(
+                'Barchart will not return todays data till 16:30')
 
         # Rule 2 No support any charts greater than 7 days prior till today
         if n > start:
@@ -163,14 +169,19 @@ class FinPlot(object):
             if delt.days > 6 and 'mav' in suggestedApis:
                 suggestedApis.remove('mav')
                 lastday = n-pd.Timedelta(days=6)
-                violatedRules.append('AlphaVantage data before {} is unavailable.'.format(lastday.strftime("%b %d")))
+                violatedRules.append('AlphaVantage data before {} is unavailable.'.format(
+                    lastday.strftime("%b %d")))
 
-        # Rule 3 No data is available for the future
+        # Rule 3 Don't call ib if its not connected
+        if 'ib' in suggestedApis and not ib.isConnected():
+            suggestedApis.remove('ib')
+            violatedRules.append('IBAPI is not connected.')
+
+        # Rule 4 No data is available for the future
         if start > n:
             suggestedApis = []
             violatedRules.append('No data is available for the future.')
 
-        
         api = api in suggestedApis if api else False
 
         return(api, violatedRules, suggestedApis)
@@ -183,19 +194,19 @@ class FinPlot(object):
         if self.api == 'bc':
             # retrieves previous biz day until about 16:30
             return bc.getbc_intraday
-        elif self.api == 'mav':
+        if self.api == 'mav':
             return mav.getmav_intraday
-        elif self.api == 'ib':
+        if self.api == 'ib':
             return ib.getib_intraday
-        elif self.api == 'iex':
+        if self.api == 'iex':
             return iex.getiex_intraday
 
-        return
+        return None
 
     def setTimeFrame(self, begin, end, interval):
         '''
         Set the amount of time before the first transaction and after the last transaction
-        to include in the chart. This may include some trend examination in the future. 
+        to include in the chart. This may include some trend examination in the future.
         For now just add some time based on the time of day and the candle interval
         :params begin: A datetime object or time string for the first transaction time.
         :params end: A datetime object or time string for the last transaction time.
@@ -204,8 +215,8 @@ class FinPlot(object):
         '''
         begin = pd.Timestamp(begin)
         end = pd.Timestamp(end)
-        beginday = pd.Timestamp(begin.year, begin.month, begin.day, 0,0)
-        endday = pd.Timestamp(end.year, end.month, end.day, 23,59) 
+        beginday = pd.Timestamp(begin.year, begin.month, begin.day, 0, 0)
+        endday = pd.Timestamp(end.year, end.month, end.day, 23, 59)
         xtime = 0
         if interval < 5:
             xtime = 20
@@ -226,22 +237,26 @@ class FinPlot(object):
         begin = mopen if begin <= orbu else begin
         end = mclose if end >= endday else end
 
+        # Trim pre and post market times
         begin = mopen if mopen > begin else begin
         end = mclose if mclose < end else end
 
         return begin, end
 
     def setadjust(self, left=.12, bottom=.17, top=.88, right=.88):
+        '''
+        Adjust the margins of the graph. Use self.interactive=True to find the correct settings
+        '''
         self.adjust['left'] = left
         self.adjust['right'] = right
         self.adjust['top'] = top
         self.adjust['bottom'] = bottom
 
-        
     def graph_candlestick(self, symbol, start=None, end=None, minutes=1,
                           dtFormat="%H:%M", save='trade'):
         '''
-        Currently this will retrieve the data using apiChooser
+        Currently this will retrieve the data using apiChooser. Set self.preferences to limit
+            acceptible apis
         :params symbol: The stock ticker
         :params start: A datetime object or time string for the begining of the graph. The day must
             be within the last 7 days. This may change in the future.
@@ -250,7 +265,6 @@ class FinPlot(object):
         :params dtFormat: a strftime formt to display the dates on the x axis of the chart
         :parmas st: The matplot lib style for style.use(st)
         '''
-
 
         start = pd.Timestamp(start)
         end = pd.Timestamp(end)
@@ -267,48 +281,53 @@ class FinPlot(object):
         df['date'] = df['date'].map(mdates.date2num)
 
         df_ohlc = df[['date', 'open', 'high', 'low', 'close']]
-        df_volume = df[['date','volume']]
+        df_volume = df[['date', 'volume']]
 
         ax1 = plt.subplot2grid((6, 1), (0, 0), rowspan=5, colspan=1)
         ttimes = start.strftime("%a %b %d %H:%M-->") + end.strftime('%H:%M')
         plt.title(f'{symbol} Daily chart\n{self.style}, {ttimes}')
         fig = plt.gcf()
-        ax2 = plt.subplot2grid((6,1), (5,0), rowspan=1, colspan=1, sharex=ax1)
+        ax2 = plt.subplot2grid((6, 1), (5, 0), rowspan=1,
+                               colspan=1, sharex=ax1)
         plt.ylabel('Volume')
 
         # width = ((60))//86400.0
-        width = (minutes*35)/(3600 *24)
+        width = (minutes*35)/(3600 * 24)
         candlestick_ohlc(ax1, df_ohlc.values, width, colorup='g', alpha=.75)
 
         for date, volume, dopen, close in zip(df_volume.date.values, df_volume.volume.values,
-                                         df_ohlc.open.values, df_ohlc.close.values): 
+                                              df_ohlc.open.values, df_ohlc.close.values):
             color = 'g' if close > dopen else 'k' if close == dopen else 'r'
             ax2.bar(date, volume, width, color=color)
 
+        # Using the candle index to locate it. Consider using a time lookup to accomodate
+        # uniquenesses in different api results
         for entry in self.entries:
             e = entry[0]
             candle = entry[1]
-            tix = entry[3]
+            # tix = entry[3]
 
-            markersize = 12 - ((len(df_ohlc)-25)/len(df_ohlc)/.18)
+            # markersize = 12 - ((len(df_ohlc)-25)/len(df_ohlc)/.18)
             # print(f'length : {len(df_ohlc)}, markersize {markersize}')
-            l = ax1.plot(df_ohlc.date[candle], e, marker='^', color='g', markersize=markersize)
+            l = ax1.plot(df_ohlc.date[candle], e, marker='^',
+                         color='g', markersize=markersize)
             plt.setp(l, markersize=markersize)
 
-        for exit in self.exits:
-            e = exit[0]
-            candle = exit[1]
-            tix = exit[3]
+        for ex in self.exits:
+            e = ex[0]
+            candle = ex[1]
+            # tix = ex[3]
 
-            markersize = 15 - ((len(df_ohlc)-30)/len(df_ohlc)/.13)
+            # markersize = 15 - ((len(df_ohlc)-30)/len(df_ohlc)/.13)
             # print(f'length : {len(df_ohlc)}, markersize {markersize}')
-            l = ax1.plot(df_ohlc.date[candle], e, marker='v', color='r', markersize=markersize)
+            l = ax1.plot(df_ohlc.date[candle], e, marker='v',
+                         color='r', markersize=markersize)
             plt.setp(l, markersize=markersize)
-   
+
         # fig = plt.Figure
 
         # fdict = {'family': 'sans serif', 'color': 'darkred', 'size': 15}
-        
+
         for label in ax2.xaxis.get_ticklabels():
             label.set_rotation(-45)
         ax2.xaxis.set_major_formatter(mdates.DateFormatter(dtFormat))
@@ -324,7 +343,7 @@ class FinPlot(object):
                      xytext=(list(df_ohlc.date)
                              [-1] + .5/24, list(df_ohlc.close)[-1]),
                      bbox=bbox_props)
-                      # , textcoords= 'axes fraction',arrowprops=dict(color='grey'))
+        # , textcoords= 'axes fraction',arrowprops=dict(color='grey'))
 
         # fdict = {'family': 'serif', 'color': 'darkred', 'size': 15}
         # ax1.text(df_ohlc.date[20], 340,'Animated Parrot Department', fontdict=fdict)
@@ -332,9 +351,11 @@ class FinPlot(object):
         ax1.text(df_ohlc.date[idx], df_ohlc.low.min(), 'ZeroSubstance',
                  fontdict={'fontname': self.matchFont('onyx'), 'size': 32, 'color': '161616'})
 
-        plt.xlabel(f'{len(df.index)} candles, msize: {int(markersize)}, cwidth: {int(width*100000)}')
+        markersize = 12 - ((len(df_ohlc)-25)/len(df_ohlc)/.18)
+        msg = f'{len(df.index)} candles, msize: {int(markersize)}, cwidth: {int(width*100000)}'
+        plt.xlabel(msg)
         # plt.ylabel('Prices over here')
-        
+
     #     plt.legend()
         ad = self.adjust
         plt.subplots_adjust(left=ad['left'], bottom=ad['bottom'], right=ad['right'],
@@ -352,9 +373,9 @@ class FinPlot(object):
                 # print(lows[0], lows[1], lows[-2], lows[-1])
                 actuallow = -1
                 actualhigh = df_ohlc.high.max()
-                for i in range(len(lows)):
-                    if lows[i] > -1:
-                        actuallow = lows[i]
+                for low in lows:
+                    if low > -1:
+                        actuallow = low
                         break
                 diff = actualhigh - actuallow
                 plt.gca().set_autoscale_on(False)
@@ -362,11 +383,6 @@ class FinPlot(object):
                 plt.ylim(top=actualhigh+(diff*margin))
                 plt.gca().set_adjustable('box')
                 # print(save, '\nylimit is ', plt.ylim())
-
-
-
-
-
 
         # fig=plt.gcf()
         if self.interactive:
@@ -380,37 +396,20 @@ def localRun():
 
     # tdy = dt.datetime.today()
 
-    start = '2019-01-17 13:30'
-    end = '2019-01-17 15:30'
     fp = FinPlot()
-    symb = 'SPY'
-    tn = 2
-
-    fp.randomStyle = True
-    fp.api = 'mav'
-
-    # print(dummyName(fp, tn, symb, start, end))
-    # fp.graph_candlestick("SPY", start=start, dtFormat='%H:%M')
-
-    # fnts = fp.matchFont('onyx')
-    # if fnts:
-    #     print(fnts)
-
-    odate = dt.datetime(2019, 1,19, 9, 40)
-    cdate = dt.datetime(2019, 1,19, 16, 30)
+    odate = dt.datetime(2019, 1, 19, 9, 40)
+    cdate = dt.datetime(2019, 1, 19, 16, 30)
     interval = 60
-    for i in range(1, 10):
-        s,e  = fp.setTimeFrame(odate, cdate, interval)
-        print (odate.strftime("%B %d %H:%M"), ' .../... ', cdate.strftime("%B %d %H:%M"))
+    for dummy in range(1, 10):
+        s, e = fp.setTimeFrame(odate, cdate, interval)
+        print(odate.strftime("%B %d %H:%M"),
+              ' .../... ', cdate.strftime("%B %d %H:%M"))
 
-        print (s.strftime("%B %d %H:%M"), ' .../... ', e.strftime("%B %d %H:%M"))
+        print(s.strftime("%B %d %H:%M"), ' .../... ', e.strftime("%B %d %H:%M"))
         print()
-        mins =  40
+        mins = 40
         odate = odate + dt.timedelta(0, mins * 60)
         cdate = cdate - dt.timedelta(0, mins * 60)
-
-
-
 
 
 if __name__ == '__main__':

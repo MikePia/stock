@@ -25,7 +25,8 @@ def getTicker():
     '''
     tickers = ['SQ', 'AAPL', 'TSLA', 'ROKU', 'NVDA', 'NUGT',
                'MSFT', 'CAG', 'ACRS', 'FRED', 'NFLX', 'MU', 'AAPL']
-    return tickers[random.randint(0,12)]
+    return tickers[random.randint(0, 12)]
+
 
 class TestGraphstuff(unittest.TestCase):
     '''
@@ -37,7 +38,6 @@ class TestGraphstuff(unittest.TestCase):
 
         ddiirr = os.path.dirname(__file__)
         os.chdir(os.path.realpath(ddiirr + '/../'))
-
 
     def test_apiChooser(self):
         '''
@@ -54,28 +54,32 @@ class TestGraphstuff(unittest.TestCase):
             fp.api = api
             result = fp.apiChooserList(start, end, api)
             if result[0]:
-                dummy, df = fp.apiChooser()(symbol, start=start, end=end, minutes=minutes, showUrl=True)
-                self.assertEqual(len(df.columns), 5, f"Failed to retrieve data with the {fp.api} api. Have you plugged it in?")
+                dummy, df = fp.apiChooser()(symbol, start=start, end=end,
+                                            minutes=minutes, showUrl=True)
+                self.assertEqual(len(df.columns), 5,
+                                 f"Failed to retrieve data with the {fp.api} api.")
                 self.assertTrue(isinstance(df.index[0], dt.datetime),
                                 f'Failed to set index to datetime in {fp.api} api')
                 cols = ['open', 'high', 'low', 'close', 'volume']
                 for col in cols:
                     # print(col, type(df[col][0]), isinstance(df[col][0], (np.float, np.integer)))
                     self.assertTrue(col in df.columns)
-                    self.assertTrue(isinstance(df[col][0], (np.float, np.integer)))
+                    self.assertTrue(isinstance(
+                        df[col][0], (np.float, np.integer)))
 
                 # This call should retrieve data within 1 bar of the requested start and finish.
                 # Idiosyncracies of the APIs vary as to inclusion of first and last time index
-                delt = df.index[0] - start if df.index[0] > start else start - df.index[0]
+                delt = df.index[0] - \
+                    start if df.index[0] > start else start - df.index[0]
                 self.assertLessEqual(delt.seconds, minutes*60)
 
-                print(f'Retrieved {len(df)} candles from {df.index[0]} to {df.index[-1]} for {symbol}')
+                print('Retrieved {} candles from {} to {} for {}'.format(
+                    len(df), df.index[0], df.index[-1], symbol))
                 print()
             else:
                 print('Skipped {api} at {start} to {end} because...')
                 for rule in result[1]:
                     print(rule)
-                
 
     def test_dummyName(self):
         '''
@@ -90,13 +94,14 @@ class TestGraphstuff(unittest.TestCase):
         self.assertTrue(n.find(fp.api) > 0)
         self.assertTrue(n.find(symbol) > 0)
         self.assertTrue(n.endswith(fp.ftype))
-        self.assertTrue(n.find(fp.base) > 0, "Check that outdir was sent to dummyName")
+        self.assertTrue(n.find(fp.base) > 0,
+                        "Check that outdir was sent to dummyName")
 
         # pylint: disable = W0104
         try:
             # Finding the assertRaises not reliable
             n = None
-            tradenum = 'three'          #bad value
+            tradenum = 'three'  # bad value
             n = dummyName(fp, symbol, tradenum, begin, end)
             self.assertTrue(n is None, 'Failed to raise ValueError')
         except ValueError:
@@ -105,7 +110,7 @@ class TestGraphstuff(unittest.TestCase):
         try:
             n is None
             tradenum = 4
-            begin = '1019091212:13'       #bad timestamp
+            begin = '1019091212:13'  # bad timestamp
             n = dummyName(fp, symbol, tradenum, begin, end)
             self.assertTrue(n is None, 'Failed to raise ValueError')
         except ValueError:
@@ -114,32 +119,38 @@ class TestGraphstuff(unittest.TestCase):
         try:
             n is None
             begin = '2019-01-20 08:30'
-            end = '2019012015:15'       #bad timestamp
+            end = '2019012015:15'  # bad timestamp
             n = dummyName(fp, symbol, tradenum, begin, end)
             self.assertTrue(n is None, 'Failed to raise ValueError')
         except ValueError:
             pass
+
     def makeupEntries(self, symbol, start, end, minutes, fp):
+        if not ib.isConnected():
+            print()
+            print("IB Gateway is not connected. Running this test",
+                  "correctly depends on connecting IB Gateway.")
+            print()
+            return
+
         meta, df = ib.getib_intraday(symbol, start, end, minutes)
         entries = []
         exits = []
-        for i in range(random.randint(2,9)):
-            candle=random.randint(0, len(df)-1)
+        for i in range(random.randint(2, 9)):
+            candle = random.randint(0, len(df)-1)
             high = df.iloc[candle].high
             low = df.iloc[candle].low
             entry = ((high - low) * random.random()) + low
             x = int(minutes*60 * random.random())
-            tix = df.index[candle] 
+            tix = df.index[candle]
             tix = tix + pd.Timedelta(seconds=x)
-            
+
             if random.random() < .35:
                 entries.append([entry, candle, minutes, tix])
             else:
                 exits.append([entry, candle, minutes, tix])
         fp.entries = entries
         fp.exits = exits
-
-
 
     def test_graph_candlestick(self):
         '''
@@ -158,13 +169,13 @@ class TestGraphstuff(unittest.TestCase):
         d = util.getPrevTuesWed(pd.Timestamp.now())
         # d = pd.Timestamp('2019-02-25')
         times = [['08:31', '09:38'],
-                ['08:32', '09:41' ],
-                ['09:39', '12:46' ],
-                ['09:47', '13:51']]
+                 ['08:32', '09:41'],
+                 ['09:39', '12:46'],
+                 ['09:47', '13:51']]
 
         tickers = []
         for i in range(4):
-            tickers.append(getTicker()) 
+            tickers.append(getTicker())
 
         trades = []
         for count, (tick, time) in enumerate(zip(tickers, times)):
@@ -173,7 +184,7 @@ class TestGraphstuff(unittest.TestCase):
             trades.append([tick, count+1, start, end, 1])
             # print (trades[-1])
         for trade in trades:
-            start, end = fp.setTimeFrame(trade[2], trade[3], trade[4] )
+            start, end = fp.setTimeFrame(trade[2], trade[3], trade[4])
             (dummy, rules, apilist) = fp.apiChooserList(trade[2], trade[3])
             print(f'{apilist}/n{rules}')
             minutes = 2
@@ -183,9 +194,10 @@ class TestGraphstuff(unittest.TestCase):
                 # if api == 'iex':
                 #     fp.interactive = True
                 name = dummyName(fp, trade[0], trade[1], trade[2], trade[3])
-                fp.graph_candlestick(trade[0], start, end, minutes=minutes, save=name)
+                fp.graph_candlestick(
+                    trade[0], start, end, minutes=minutes, save=name)
                 cwd = os.getcwd()
-                msg = 'error creating '+ name + " IN ", cwd
+                msg = 'error creating ' + name + " IN ", cwd
                 self.assertTrue(os.path.exists(name), msg)
 
     def test_setTimeFrame(self):
@@ -193,21 +205,21 @@ class TestGraphstuff(unittest.TestCase):
         setTimeFrame will require usage to figure out the right settings. Its purpose is to frame
         the chart with enough time before and after the transactions to give perspective to the
         trade. Ideally, it will include some intelligence with trending information and evaluation
-        of the highs and lows within the day. The point here is this method is not done. 
+        of the highs and lows within the day. The point here is this method is not done.
         '''
         fp = FinPlot()
         early = dt.datetime(2019, 1, 19, 0, 0)
         late = dt.datetime(2019, 1, 19, 23, 55)
-        odate = dt.datetime(2019, 1,19, 9, 40)
-        cdate = dt.datetime(2019, 1,19, 16, 30)
+        odate = dt.datetime(2019, 1, 19, 9, 40)
+        cdate = dt.datetime(2019, 1, 19, 16, 30)
         opening = dt.datetime(2019, 1, 19, 9, 30)
         closing = dt.datetime(2019, 1, 19, 16, 00)
         interval = 1
         interval2 = 60
-        #tests dependent on interval -- setting to 1
+        # tests dependent on interval -- setting to 1
         for i in range(1, 10):
-            s,e  = fp.setTimeFrame(odate, cdate, interval)
-            s2,e2  = fp.setTimeFrame(odate, cdate, interval2)
+            s, e = fp.setTimeFrame(odate, cdate, interval)
+            s2, e2 = fp.setTimeFrame(odate, cdate, interval2)
             s3, e3 = fp.setTimeFrame(early, late, interval)
             if odate < opening:
                 self.assertEqual(s, opening)
@@ -221,14 +233,18 @@ class TestGraphstuff(unittest.TestCase):
                 self.assertEqual(s3, opening)
             if late > closing:
                 self.assertEqual(e3, closing)
-            mins =  40
+            mins = 40
             odate = odate + dt.timedelta(0, mins * 60)
             cdate = cdate - dt.timedelta(0, mins * 60)
-            early = early +  dt.timedelta(0, mins * 60)
+            early = early + dt.timedelta(0, mins * 60)
             late = late - dt.timedelta(0, mins * 60)
 
+
 def main():
-    '''test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest discovery'''
+    '''
+    test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest
+    discovery
+    '''
     f = TestGraphstuff()
     for name in dir(f):
         if name.startswith('test'):
@@ -244,10 +260,9 @@ def notmain():
     t = TestGraphstuff()
     # t.test_apiChooser()
     # t.test_dummyName()
-    # t.test_graph_candlestick()
+    t.test_graph_candlestick()
     # print(getLastWorkDay(dt.datetime(2019, 1, 22)))
-    t.test_setTimeFrame()
-
+    # t.test_setTimeFrame()
 
 
 if __name__ == '__main__':
