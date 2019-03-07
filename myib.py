@@ -10,7 +10,7 @@ from threading import Thread
 import queue
 import pandas as pd
 
-from ibapi import wrapper 
+from ibapi import wrapper
 from ibapi.client import EClient
 
 # from ibapi.wrapper import EWrapper
@@ -21,8 +21,7 @@ from stock.utilities import getLastWorkDay
 
 
 # import time
-# pylint: disable=C0103
-# pylint: disable=C0301
+# pylint: disable = W0613, C0103, R0903, R0913, R0914
 
 
 BAR_SIZE = ['1 sec', '5 secs', '10 secs', '15 secs', '30 secs',
@@ -52,36 +51,24 @@ def getLimits():
 def ni(i, minutes='minutes'):
     '''
     Utility to normalize the the interval parameter.
+    :params i:
     '''
-    if minutes != 'minutes':
-        print(f'{minutes} is not supported yet. Setting to 1 min')
-    if i in BAR_SIZE:
-        return i
-    if i in ['1', '2', '3', '5', '10', '15', '20', '30', '60']:
-        return {'1': '1 min', '2': '2 mins', '3': '3 mins', '5': '5 mins', '10': '10 mins',
-                '15': '15 mins', '20': '20 mins', '30': '30 mins', '60': '1 hour'}[i]
+
+    # Setting the unpython like baby sitter because I am changing this method and I need to
+    # find any discrepencies
+    if not isinstance(i, int):
+        raise ValueError('For ib.ni minutes must be an int')
+    # if minutes != 'minutes':
+    #     print(f'{minutes} is not supported yet. Setting to 1 min')
+    durdict = {1: '1 min', 2: '2 mins', 3: '3 mins', 5: '5 mins', 10: '10 mins',
+               15: '15 mins', 20: '20 mins', 30: '30 mins', 60: '1 hour'}
+    resamp = False
+    if i in durdict.keys():
+        return (resamp, (durdict[i], i, i))
+    resamp = True
     if isinstance(i, int):
-        ret = '1 hour'
-        if i < 2:
-            ret = '1 min'
-        elif i < 3:
-            ret = '2 mins'
-        elif i < 5:
-            ret = '3 mins'
-        elif i < 10:
-            ret = '5 mins'
-        elif i < 15:
-            ret = '10 mins'
-        elif i < 20:
-            ret = '15 mins'
-        elif i < 30:
-            ret = '20 mins'
-        elif i < 60:
-            ret = '30 mins'
-        return ret
-    print(
-        f"interval = '{i}' is not supported by alphavantage. Setting to 1min candle.")
-    return '1 min'
+        return (resamp, ('1 min', 1, i))
+    return (False, ('', 0, 0))
 
 def validateDurString(s):
     '''
@@ -189,8 +176,8 @@ class TestApp(TestWrapper, TestClient):
 
     def historicalDataOperations_req(self):
         '''Overridder'''
-        pass
-        #  self.reqHistoricalData(4103, ContractSamples.EuropeanStock(), queryTime, "10 D", "1 min", "TRADES", 1, 1, False, [])
+        # self.reqHistoricalData(4103, ContractSamples.EuropeanStock(), queryTime,
+        #                        "10 D", "1 min", "TRADES", 1, 1, False, [])
 
     def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
         '''
@@ -227,11 +214,13 @@ class TestApp(TestWrapper, TestClient):
         # app.reqContractDetails(10, contract)
 
         timeStr = end.strftime('%Y%m%d %H:%M:%S')
-        # self.reqHistoricalData(18002, ContractSamples.ContFut(), timeStr, "1 Y", "1 month", "TRADES", 0, 1, False, []);
+        # self.reqHistoricalData(18002, ContractSamples.ContFut(), timeStr,
+        #                        "1 Y", "1 month", "TRADES", 0, 1, False, []);
         # queryTime = DateTime.Now.AddMonths(-6).ToString("yyyyMMdd HH:mm:ss");
         self.reqHistoricalData(4001, contract, timeStr, dur,
                                interval, "TRADES", 1, 1, False, [])
-        # client.reqHistoricalData(4002, ContractSamples.EuropeanStock(), queryTime, "10 D", "1 min", "TRADES", 1, 1, false, null);
+        # client.reqHistoricalData(4002, ContractSamples.EuropeanStock(), queryTime,
+        #                          "10 D", "1 min", "TRADES", 1, 1, false, null);
         # print('Requesting access')
 
         # self.run()
@@ -270,6 +259,8 @@ def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
         start = pd.Timestamp(biz.year, biz.month, biz.day, 9, 30)
     start = pd.Timestamp(start)
     end = pd.Timestamp(end)
+
+    dur = ''
     if (end-start).days < 1:
         if ((end-start).seconds//3600) > 8:
             dur = '1 D'
@@ -279,8 +270,8 @@ def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
         dur = f'{(end-start).days + 1} D'
     else:
         dur = f'{(end-start).days} D'
-        print('Requests longer than 6 days are not supported.')
-        return pd.DataFrame([], [])
+        print('Requests longer than 6 days are not supported. (for now)')
+        return 0, pd.DataFrame([], [])
 
     # if the end = 9:31 and dur = 3 minutes, ib will retrieve a start of the preceding day @ 15:58
     # This is unique behavior in implemeted apis. We will just let ib do whatever and cut off the
@@ -288,7 +279,7 @@ def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
 
     symb = symbol
     # daDate = end
-    interval = ni(minutes)
+    (resamp, (interval, minutes, origminutes)) = ni(minutes)
     # chart(symb, d, dur/, interval)
     ib = TestApp(7496, 7878)
     # def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
@@ -302,6 +293,14 @@ def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
     df.index = pd.to_datetime(df.index)
     if start > df.index[0]:
         df = df.loc[df.index >= start]
+    if resamp:
+        srate = f'{origminutes}T'
+        df_ohlc = df[['open']].resample(srate).first()
+        df_ohlc['high'] = df[['high']].resample(srate).max()
+        df_ohlc['low'] = df[['low']].resample(srate).min()
+        df_ohlc['close'] = df[['close']].resample(srate).last()
+        df_ohlc['volume'] = df[['volume']].resample(srate).sum()
+        df = df_ohlc.copy()
 
     ib.disconnect()
     return len(df), df
