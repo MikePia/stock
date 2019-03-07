@@ -4,6 +4,7 @@
 @creation_date: 2019-01-17
 '''
 import datetime as dt
+import types
 import unittest
 
 from stock import utilities as util
@@ -32,5 +33,18 @@ def notmain():
     t = TestUtilities()
     t.test_getLastWorkDay()
 
+def main():
+    '''
+    test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest
+    discovery
+    '''
+    f = TestUtilities()
+    for name in dir(f):
+        if name.startswith('test'):
+            attr = getattr(f, name)
+            if isinstance(attr, types.MethodType):
+                attr()
+
 if __name__ == '__main__':
-    notmain()
+    # notmain()
+    main()

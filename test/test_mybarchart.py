@@ -5,6 +5,7 @@
 '''
 
 import datetime as dt
+import types
 import unittest
 import pandas as pd
 
@@ -50,7 +51,7 @@ class TestMybarchart(unittest.TestCase):
 
         # def test_getbc_intraday(self):
         now = dt.datetime.today()
-        now = util.getLastWorkDay()          # We want to retrieve a day with data for testing here
+        nowbiz = util.getLastWorkDay()          # We want to retrieve a day with data for testing here
         tomorrow = now + dt.timedelta(1)
         y = now - dt.timedelta(1)
         ymorn = dt.datetime(y.year, y.month, y.day, 7, 30)
@@ -60,13 +61,17 @@ class TestMybarchart(unittest.TestCase):
         beginDay = dt.datetime(now.year, now.month, now.day, 9, 30)
         endDay = dt.datetime(now.year, now.month, now.day, 16, 0)
 
-        # These should all retrieve the same data. No start date and today trigger a 1day query
+        # These should all retrieve the same data. unless the day is today before 4:30. No start
+        # date and today trigger a 1day query
         # for the most current biz day (which may be yesterday if its before 16:30 on Tuesday)
         dateArray = [(None, None),
                      (beginDay, None),
                      (None, endDay),
                      (beginDay, endDay),
-                     (None, tomorrow)]  # Same as both None
+                     (None, tomorrow),
+                     (ymorn, yaft),
+                     (None, yaft),
+                     (ymorn, None)]  # Same as both None
 
         dateArray2 = [(ymorn, None), (ymorn, yaft)]
 
@@ -82,8 +87,17 @@ class TestMybarchart(unittest.TestCase):
                 print('Abandon all hope of retrieving barchart data today.\n',
                       'You have run out of free queries.')
                 return
-            self.assertGreater(len(df), 0)
-            bdays.append((df.index[0], df.index[-1]))
+            if not start or start.date() == now.date():
+                magictime = pd.Timestamp(now.year, now.month, now.day, 16, 30)
+                if now.time() < magictime.time():
+                    self.assertTrue(df.empty)
+                    continue
+                else:
+                    print('wtf', start, now)
+            
+            else:        
+                self.assertGreater(len(df), 0)
+                bdays.append((df.index[0], df.index[-1]))
 
             # Given start == None, barchart returns data from previous weekday (holidays ignored)
             now = pd.Timestamp.today()
@@ -102,7 +116,9 @@ class TestMybarchart(unittest.TestCase):
             if end and end > s and end < e:
                 end2 = end - pd.Timedelta(minutes=interval)
                 msg = f'\nInput: {end} \nTest:  {e} \nIndex: {df.index[-1]}'
-                self.assertTrue(end == df.index[-2] or end == df.index[-1])
+                delt = df.index[-1] - end if df.index[-1] > end else end - df.index[-1]
+
+                self.assertLessEqual(int(delt.total_seconds()), interval*60)
                 # self.assertEqual(df.index[-1], end2, msg)
 
         for i in range(len(bdays) - 1):
@@ -123,8 +139,9 @@ class TestMybarchart(unittest.TestCase):
     def test_getbc_intraday_interval(self):
         '''Test the candle intvarls by subtracting strings processed into times'''
         intervals = [2, 6, 60, 15]
+        start = getPrevTuesWed(pd.Timestamp.today())
         for interval in intervals:
-            dummy, df = bc.getbc_intraday("SQ", minutes=interval)
+            dummy, df = bc.getbc_intraday("SQ", start=start, minutes=interval)
 
             # of a time string ---
             min0 = df.index[0]
@@ -157,5 +174,5 @@ def notmain():
 
 
 if __name__ == '__main__':
-    # main()
-    notmain()
+    main()
+    # notmain()

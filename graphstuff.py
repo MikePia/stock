@@ -302,13 +302,12 @@ class FinPlot:
 
         # Using the candle index to locate it. Consider using a time lookup to accomodate
         # uniquenesses in different api results
+        markersize = 12 - ((len(df_ohlc)-25)/len(df_ohlc)/.18)
         for entry in self.entries:
             e = entry[0]
             candle = entry[1]
             # tix = entry[3]
-
-            # markersize = 12 - ((len(df_ohlc)-25)/len(df_ohlc)/.18)
-            # print(f'length : {len(df_ohlc)}, markersize {markersize}')
+            
             l = ax1.plot(df_ohlc.date[candle], e, marker='^',
                          color='g', markersize=markersize)
             plt.setp(l, markersize=markersize)
@@ -318,8 +317,6 @@ class FinPlot:
             candle = ex[1]
             # tix = ex[3]
 
-            # markersize = 15 - ((len(df_ohlc)-30)/len(df_ohlc)/.13)
-            # print(f'length : {len(df_ohlc)}, markersize {markersize}')
             l = ax1.plot(df_ohlc.date[candle], e, marker='v',
                          color='r', markersize=markersize)
             plt.setp(l, markersize=markersize)
@@ -351,7 +348,7 @@ class FinPlot:
         ax1.text(df_ohlc.date[idx], df_ohlc.low.min(), 'ZeroSubstance',
                  fontdict={'fontname': self.matchFont('onyx'), 'size': 32, 'color': '161616'})
 
-        markersize = 12 - ((len(df_ohlc)-25)/len(df_ohlc)/.18)
+        
         msg = f'{len(df.index)} candles, msize: {int(markersize)}, cwidth: {int(width*100000)}'
         plt.xlabel(msg)
         # plt.ylabel('Prices over here')

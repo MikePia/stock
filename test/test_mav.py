@@ -6,6 +6,7 @@ Test code for myalphavantage module.
 import datetime as dt
 import unittest
 from time import time, sleep
+import types
 
 import pandas as pd
 
@@ -147,6 +148,16 @@ class TestMyalphavantage(unittest.TestCase):
         res = mav.ni(450)
         self.assertEqual(res, (False,('60min', 60, 60)))
 
+def main():
+    '''test discovery is not working in vscode. Use this for debugging. Then run cl python -m unittest discovery'''
+    f = TestMyalphavantage()
+    for name in dir(f):
+        if name.startswith('test'):
+            attr = getattr(f, name)
+            if isinstance(attr, types.MethodType):
+                attr()
+
+
 
 def notmain():
     '''Run some local code for dev'''
@@ -155,4 +166,5 @@ def notmain():
     # m.test_ni()
 
 if __name__ == '__main__':
-    notmain()
+    # notmain()
+    main()

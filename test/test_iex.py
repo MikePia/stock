@@ -5,6 +5,7 @@
 '''
 
 import datetime as dt
+import types
 import unittest
 import pandas as pd
 
@@ -73,7 +74,7 @@ class TestMyiex(unittest.TestCase):
                      (startstamp, endstring)]
 
         for start, end in dateArray:
-            df = iex.getiex_intraday('SQ', start=start, end=end)
+            lendf, df = iex.getiex_intraday('SQ', start=start, end=end)
             self.assertGreater(len(df), 0)
 
     def test_getiex_intraday_interval(self):
@@ -82,11 +83,8 @@ class TestMyiex(unittest.TestCase):
         for interval in intervals:
             x, df = iex.getiex_intraday("SQ", minutes=interval)
 
-            # HACK ALERT -- there has got to be a better way to find the differnce in minutes
-            # of a time string ---
             min0 = df.index[0]
             min1 = df.index[1]
-
             delt = min1 - min0
             interval_actual = delt.seconds//60
             self.assertEqual(interval_actual, interval)
@@ -122,16 +120,12 @@ class TestMyiex(unittest.TestCase):
 
     def test_get_trading_chart_interval(self):
         '''Test the candle intvarls by subtracting strings processed into times'''
-        intervals = [6, 60, 15]
+        intervals = [6, 60, 15, 9, 4]
         for interval in intervals:
             df = iex.get_trading_chart("SQ", minutes=interval)
 
-            # HACK ALERT -- there has got to be a better way to find the differnce in minutes
-            # of a time string ---
             min0 = df.index[0]
             min1 = df.index[1]
-
-            
             delt = min1-min0
             interval_actual = delt.seconds//60
             self.assertEqual(interval_actual, interval)
@@ -201,8 +195,12 @@ class TestMyiex(unittest.TestCase):
             start= pd.Timestamp(start)
             end = pd.Timestamp(end)
 
-            actualStart = df.index[0]
-            actualEnd = df.index[-1]
+            astart = df.index[0]
+            aend = df.index[-1]
+            deltstart = astart - start if astart > start else start - astart
+            deltend =   aend - end if aend > end else end - aend
+            self.assertLess(deltstart.days, 4)
+            self.assertLess(deltend.days, 4)
 
             self.assertNotEqual(actualStart, start)
             self.assertNotEqual(actualEnd, end)
@@ -224,6 +222,6 @@ def notmain():
 
 if __name__ == '__main__':
     main()
-    # notmain()
+    # notmain() 
 
     

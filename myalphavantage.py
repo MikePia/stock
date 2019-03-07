@@ -104,6 +104,13 @@ def ni(i):
         :params c: an int representing the requested interval
     '''
     resamp = False
+
+    # OK something very weird.  i > 1 was caused an exception when running unittest discover and
+    # at no other time.  I placed this baby sitter here and the error disappeared. The exception
+    # was comparison of str and int. I could not trigger the exception or find a str instance error
+    # It never happened for running unittest test_mav
+    if isinstance(i, str):
+        print(':::::::::::::::::\n', i, '::::::::::::::::::\n')
     if i < 1:
         i = 1
     elif i > 120:
@@ -287,19 +294,3 @@ if __name__ == '__main__':
     x, ddf = getmav_intraday("SPY", start=dastart, end=daend, minutes='60min')
     print(ddf.head(2))
     print(ddf.tail(2))
-    # print()
-    # print('Your api key is:', getkey()['key'])
-    # print('Here is a restful api:', EXAMPLES['api1'])
-    # print('docs at:', EXAMPLES['web_site'])
-    # print('Limits 5 calls per minute, 500 per day\n\n')
-
-    # symbol='SQ'
-    # start = "20190109 10:30"
-    # end = "20190109 15:00"
-    # minutes=None
-    # theDate=None
-    # # theDate = dt.datetime(2019, 1, 3)
-
-    # df = getmav_intraday(symbol, start, end, minutes=minutes, theDate=theDate)
-    # print (df.head())
-    # print(df.tail())

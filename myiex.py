@@ -194,7 +194,6 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, filt=False, show
     df = df.loc[df.index >= start] if start else df
     df = df.loc[df.index <= end] if end else df
     return df
-# get_trading_chart("MSFT", "10:23", "16:37", minutes=2, theDate="20181214").head()
 
 
 BASE_URL = 'https://api.iextrading.com/1.0'
@@ -202,13 +201,13 @@ BASE_URL = 'https://api.iextrading.com/1.0'
 
 def get_historical_chart(symb, start=None, end=None, showUrl=False, filt=False):
     '''
-    Gets daily information from stock ticker symb.
+    Gets end of day daily information from stock ticker symb.
     :parmas symb: The stock ticker
     :params:start: Starting Date time. A Datetime object or string.
     :params:end: Ending date time. A Datetime object or string.
     :params  filt: Return only date ohlcv -whic is the default for this endpoint anyway
     :return: A DataFrame with an index of date->timestamp and numpy.float values on ohlcv
-    :raise: Exception if the API call returns a status other thatn 200
+    :raise: Exception if the API call returns a status other than 200
     '''
     # now = dt.datetime.today()
 
@@ -285,16 +284,6 @@ def main():
     end = '2018-12-31 16:05'
     dummy, df = getiex_intraday('AAPL', start, end, minutes=1, showUrl=True)
     print(df)
-
-    # start="11:30"
-    # end="16:05"
-    # minutes=1
-    # theDate="20181231"
-
-    # iexdf=get_trading_chart("AAPL", start, end, minutes,showUrl=True)
-
-    # df = iex.get_historical_chart("AAPL")
-# print (iexdf)
 
 
 if __name__ == "__main__":
