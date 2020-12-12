@@ -1,8 +1,10 @@
 # Pulling this project out of mothballs to make it independent from structjour. 
 ## The state of the software is development
 * Make it a PyPi package when it approaches the point of general usefulness to:
-    * get chart data from free apis or IBAPI
-    * create an intraday candle chart with optional entries and exits
+    * get intraday chart data from free apis or IBAPI
+    * create an intraday candle chart with optional entries and exits shown as markers
+    * These APIS can generlly to a ton more stuff. The main goal here is for a unified access from free APIs to chart data for intraday trades. 
+        * In the meantime, make the interface clean enough to expand it to include what ever they got in a uniform way
 
 ## The initial change is to move files
 * next get rid of unused APIS that started charging or restricted usage too much
