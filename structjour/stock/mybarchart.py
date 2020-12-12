@@ -1,26 +1,40 @@
+# Structjour -- a daily trade review helper
+# Copyright (C) 2019 Zero Substance Trading
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 '''
 Some barchart calls beginning (and ending now) with getHistory. Note that the docs show SOAP code
 to run this in python but as of 12/29/18 the suds module (suds not suds-py3) does not work on my
-system. I am goingto implement the straight RESTful free API using request.
+system. I am goingto implement the straight RESTful free API using request. All we need is
+getHistory and to implement the APIChooser interface for it.
 
 @author: Mike Petersen
 @creation_data: 12/19/18
 '''
 import datetime as dt
+import logging
 import requests
 import pandas as pd
-from stock.picklekey import getKey as getReg
-from stock import utilities as util
-# pylint: disable = C0103, R0912, R0914, R0915
-APIKEY = getReg('barchart')['key']
-
-# https://marketdata.websol.barchart.com/getHistory.json?apikey={APIKEY}&symbol=AAPL&type=minutes&startDate=20181001&maxRecords=100&interval=5&order=asc&sessionFilter=EFK&splits=true&dividends=true&volume=sum&nearby=1&jerq=true
+from structjour.stock.utilities import ManageKeys, getLastWorkDay, movingAverage, setLimitReached, getLimitReached
 
 
 def getApiKey():
     '''Returns the key for the barchart API
     '''
-    return APIKEY
+    mk = ManageKeys()
+    return mk.getKey('bc')
 
 
 def getLimits():
@@ -39,12 +53,12 @@ def getFaq():
     faq = '''
         https://www.barchart.com/ondemand/free-market-data-api/faq
         https://www.barchart.com/ondemand/api gives api for several dozen calls.
-        The free api is limited to getQuote and getHistory. 
+        The free api is limited to getQuote and getHistory.
             https://www.barchart.com/ondemand/free-market-data-api
         Exchanges iclude AMEX, NYSE, NASDAQ.
         Within the last couple of years, the free API shrunk without warning.
         Every user is able to make 400 getQuote queries and 150 getHistory queries per day.
-        When your daily API account query limit is reached, the data will be disabled then 
+        When your daily API account query limit is reached, the data will be disabled then
             reset until the next day.
         Pricing info for other apis requires you contact a sales person (shudder).
         '''
@@ -71,26 +85,11 @@ TYPE = ['minutes', 'nearbyMinutes', 'formTMinutes',
 ORDER = ['asc', 'desc']
 VOLUME = ['total', 'sum', 'contract', 'sumcontract', 'sumtotal']
 
-# For testing
-DEMO_PARAMS = {'apikey': APIKEY,
-               'symbol': 'AAPL',
-               'type': 'minutes',
-               'startDate': '2018-12-03 12:45',
-               'maxRecords': 500,
-               'interval': 30,
-               #    'order': 'asc',
-               #    'sessionFilter': 'EFK',
-               #    'splits': 'true',
-               #    'dividends': 'true',
-               'volume': 'sum',
-               #    'nearby': 1,
-               #    'jerq': 'true'
-               }
 
-def setParams(symbol, minutes, startDay):
+def setParams(symbol, minutes, startDay, key=None):
     '''Internal utility method'''
     params = {}
-    params['apikey'] = APIKEY
+    params['apikey'] = key if key else getApiKey()
     params['symbol'] = symbol
     params['type'] = 'minutes'
     params['interval'] = minutes
@@ -103,8 +102,9 @@ def setParams(symbol, minutes, startDay):
     params['jerq'] = 'true'
     return params
 
+
 # Not getting the current date-- maybe after the market closes?
-def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
+def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False, key=None):
     '''
     Note that getHistory will return previous day's prices until 15 minutes after the market
         closes. We will generate a warning if our start or end date differ from the date of the
@@ -122,7 +122,12 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
         seperate from request status_code.
     :raise: ValueError if response.status_code is not 200.
     '''
+    if getLimitReached('bc'):
+        msg = 'BarChart limit was reached'
+        logging.info(msg)
+        return {'code': 666, 'message': msg}, pd.DataFrame(), None
 
+    logging.info('======= Called Barchart -- 150 call limit, data available after market close =======')
     if not end:
         tdy = dt.datetime.today()
         end = dt.datetime(tdy.year, tdy.month, tdy.day, 17, 0)
@@ -131,113 +136,119 @@ def getbc_intraday(symbol, start=None, end=None, minutes=5, showUrl=False):
     if not start:
         tdy = dt.datetime.today()
         start = dt.datetime(tdy.year, tdy.month, tdy.day, 6, 0)
-        start = util.getLastWorkDay(start)
+        start = getLastWorkDay(start)
     end = pd.to_datetime(end)
     start = pd.to_datetime(start)
-    startDay = start.strftime("%Y%m%d")
+    # startDay = start.strftime("%Y%m%d")
 
-    params = setParams(symbol, minutes, startDay)
+    # Get the maximum data in order to set the 200 MA on a 60 minute chart
+    fullstart = pd.Timestamp.today()
+    fullstart = fullstart - pd.Timedelta(days=40)
+    fullstart = fullstart.strftime("%Y%m%d")
 
+    params = setParams(symbol, minutes, fullstart, key=key)
 
     response = requests.get(BASE_URL, params=params)
     if showUrl:
-        print(response.url)
+        logging.info(response.url)
 
     if response.status_code != 200:
         raise Exception(
             f"{response.status_code}: {response.content.decode('utf-8')}")
-    if (
-            response.text
-            and isinstance(response.text, str)
-            and response.text.startswith('You have reached')):
-        print('WARNING: API max queries:\n', response.text)
-        meta = {'code': 666, 'message': response.text}
-        return meta, pd.DataFrame()
+    meta = {'code': 200}
+    if (response.text and isinstance(response.text, str) and response.text.startswith('You have reached')):
+        d = pd.Timestamp.now()
+        dd = pd.Timestamp(d.year, d.month, d.day + 1, 3, 0, 0)
+        setLimitReached('bc', dd)
 
+        logging.warning(f'API max queries: {response.text}')
+        meta['message'] = response.text
+        return meta, pd.DataFrame(), None
 
     result = response.json()
     if not result['results']:
-        print('WARNING: Failed to retrieve any data. Barchart sends the following greeting:')
-        print(result['status'])
-        return result['status'], pd.DataFrame()
+        logging.warning('''Failed to retrieve any data. Barchart sends the following greeting: {result['status']}''')
+        return result['status'], pd.DataFrame(), None
 
+    meta['message'] = result['status']['message']
+    df = pd.DataFrame(result['results'])
 
-    keys = list(result.keys())
-    meta = result[keys[0]]
-
-
-    # JSONTimeSeries = result[keys[1]]
-    df = pd.DataFrame(result[keys[1]])
-
-    # HACKALERT hacky code alert Retrieve the tz hour and minutes  from the funky timestamp.
-    # Subtract Timedelta from to_datetime.. Not sure about this code ...
-    # hour = int(df.timestamp[0][20:-3])
-    # seconds = int(df.timestamp[0][23:])*60
-
-    # there has got to be a better way to do this--
-    for i, dummy in df.iterrows():
-        d = pd.to_datetime(df.at[i, 'timestamp'])
+    for i, row in df.iterrows():
+        d = pd.Timestamp(row['timestamp'])
         newd = pd.Timestamp(d.year, d.month, d.day, d.hour, d.minute, d.second)
         df.at[i, 'timestamp'] = newd
-        # print(d, newd)
 
     df.set_index(df.timestamp, inplace=True)
     df.index.rename('date', inplace=True)
-
-    msg = ''
-    if start.date() < df.index[0].date():
-        msg = ' '.join(["\nWARNING: Requested start date is not included in response. ",
-                        "Did you request a weekend or holiday?",
-                        f"First timestamp: {df.index[0]}\n",
-                        f"Requested start of data: {start}\n"])
-        print(msg)
-
-    elif start.date() > df.index[0].date():
-        msg = "\nWARNING: Requested start date is after the barchart response. If the market is\n"
-        msg = msg + " still open? Barchart will retrieve today after the close and not before.\n"
-        msg = msg + f"First timestamp: {df.index[0]}\n"
-        msg = msg + f"Requested start of data: {start}\n"
-        print(msg)
+    maDict = movingAverage(df.close, df, start)
 
     if start > df.index[0]:
+        rstart = df.index[0]
+        rend = df.index[-1]
         df = df.loc[df.index >= start]
+        for ma in maDict:
+            maDict[ma] = maDict[ma].loc[maDict[ma].index >= start]
+
         lendf = len(df)
         if lendf == 0:
             msg = '\nWARNING: all data has been removed.'
             msg = msg + f'\nThe Requested start was({start}).'
-            print(msg)
+            msg = msg + f'\nBarchart returned data beginning {rstart} and ending {rend}'
+            msg += '''If you are seeking a chart from today, its possible Barchart has not made'''
+            msg += 'the data available yet. (Should be available by 4:45PM but they are occasionally late)'
+            msg += 'You can copy the image yourself, wait, or try a different API. Open File->StockAPI'
+            logging.warning(msg)
             meta['code2'] = 199
             meta['message'] = meta['message'] + msg
-            return meta, df
-
+            return meta, df, maDict
 
     if end < df.index[-1]:
         df = df.loc[df.index <= end]
+        for ma in maDict:
+            maDict[ma] = maDict[ma].loc[maDict[ma].index <= end]
+
         # If we just sliced off all our data. Set warning message
         lendf = len(df)
         if lendf == 0:
-            msg = msg + '\nWARNING: all data has been removed.'
+            msg = '\nWARNING: all data has been removed.'
             msg = msg + f'\nThe Requested end was({end}).'
             meta['code2'] = 199
             meta['message'] = meta['message'] + msg
-            print(meta)
-            return meta, df
+            logging.warning(f'{meta}')
+            return meta, df, maDict
 
-    # Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[]
+    deleteMe = list()
+    for key in maDict:
+        if key == 'vwap':
+            continue
+        if len(df) != len(maDict[key]):
+            deleteMe.append(key)
+    for key in deleteMe:
+        del maDict[key]
+
+    # Note we are dropping columns  ['symbol', 'timestamp', 'tradingDay[] in favor of ohlcv
     df = df[['open', 'high', 'low', 'close', 'volume']].copy(deep=True)
-    return meta, df
+    return meta, df, maDict
 
 
 def main():
     '''Local runs for debugging'''
     symbol = 'SQ'
     showUrl = True
-    end = '2019-02-28 15:30'
-    start = pd.Timestamp('2019-02-27')
+    end = pd.Timestamp.today() - pd.Timedelta(days=1)
+    start = end - pd.Timedelta(days=7)
+
     minutes = 1
-    dummy, d = getbc_intraday(symbol, start=start, end=end, minutes=minutes, showUrl=showUrl)
+    meta, d, daMas = getbc_intraday(symbol, start=start, end=end, minutes=minutes, showUrl=showUrl)
     print(len(d))
+    print(meta)
+
+
+def notmain():
+
+    print(getApiKey())
 
 
 if __name__ == '__main__':
     main()
+    # notmain()

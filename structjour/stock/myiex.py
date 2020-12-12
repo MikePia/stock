@@ -1,14 +1,41 @@
+# Structjour -- a daily trade review helper
+# Copyright (C) 2019 Zero Substance Trading
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 '''
-A module to access iex API. From the REStful source. No wrapeere packages
+A module to access iex API. From the REStful source. No wraper packages
 @author: Mike Petersen
 @creation_date: 12/20/18
+This API is no longer active. They outsourced. New API at iexcloud. Not planning to support.
+Will likely delete this module.
 '''
 # import datetime as dt
+import logging
 import pandas as pd
 import requests
 # pylint: disable=C0103
 
 
+# The system has completely changed to.
+console = 'https://iexcloud.io/console'
+newstuff = 'https://iexcloud.io/docs/api/#rest-how-to'
+publishkey = 'pk_194005def30849edaa93d704e8bd68e2'
+secretkey = 'sk_500658eb0eb6474fbcab439b9e331b27'
+# For now-- just disable iex 9/11/19. z
+
+# None of these or anything else on this page is any good
 apiurl = 'https://api.iextrading.com/1.0/stock/aapl/chart/5y?format=json'
 newsurl = 'https://api.iextrading.com/1.0/stock/aapl/batch?types=quote,news,chart&range=1m&last=10'
 apidocs = 'https://iextrading.com/developer/docs/#getting-started'
@@ -62,7 +89,7 @@ def validateTimeString(start, end):
                 assert m < 60
                 assert m > -1
             except Exception as ex:
-                print(f"{ex.__class__.__name__}: {ex}")
+                logging.error(ex)
                 raise ValueError(msg)
 
 
@@ -81,6 +108,7 @@ def getiex_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
     :raise: ValueError if start and end day are different.
     :raise: Exception if the API return's status is not 200
     '''
+    print('Were in iex')
     startday = endday = None
     if start:
         start = pd.Timestamp(start)
@@ -105,7 +133,7 @@ def getiex_intraday(symbol, start=None, end=None, minutes=None, showUrl=False):
         df = df[['open', 'high', 'low', 'close', 'volume']].copy(deep=True)
 
     # HACK, reurning a tuple to have the same method signature as the others-- some redesign comin
-    return len(df), df
+    return {'code': 200}, df, None
 
 # TODO combine these two methods on this page
 
@@ -139,7 +167,7 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, filt=False, show
         now = pd.Timestamp.today()
         now = pd.Timestamp(now.year, now.month, now.day)
         if ts > now:
-            print('\nWARNING: you have requested a day in the future. Call cancelled.\n')
+            logging.warning('You have requested a day in the future. Call cancelled.')
             return pd.DataFrame()
 
         rng = f"date/{theDate}"
@@ -172,12 +200,11 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, filt=False, show
         print(response.url)
 
     if response.status_code != 200:
-        raise Exception(
-            f"{response.status_code}: {response.content.decode('utf-8')}")
+        return {'code': response.status_code}, pd.DataFrame, response.text
     result = response.json()
     if not result:
         # DataFrames cannot be checked for None !?!
-        return pd.DataFrame()
+        return {'code': 666}, pd.DataFrame(), 'No result'
 
     df = pd.DataFrame(result)
 
@@ -193,7 +220,7 @@ def get_trading_chart(symb, start=None, end=None, minutes=None, filt=False, show
 
     df = df.loc[df.index >= start] if start else df
     df = df.loc[df.index <= end] if end else df
-    return df
+    return {'code': response.status_code}, df, 'Success'
 
 
 BASE_URL = 'https://api.iextrading.com/1.0'
@@ -201,7 +228,7 @@ BASE_URL = 'https://api.iextrading.com/1.0'
 
 def get_historical_chart(symb, start=None, end=None, showUrl=False, filt=False):
     '''
-    Gets end of day daily information from stock ticker symb.
+    Gets end of day daily information from structjour.stock ticker symb.
     :parmas symb: The stock ticker
     :params:start: Starting Date time. A Datetime object or string.
     :params:end: Ending date time. A Datetime object or string.
@@ -225,7 +252,7 @@ def get_historical_chart(symb, start=None, end=None, showUrl=False, filt=False):
         # This will round up to get an extra month (or less) when we are close to the 5 year limit
         now = pd.Timestamp.today()
         start = pd.to_datetime(start)
-        reqmonths = (((now - start).days)/30) + 1
+        reqmonths = (((now - start).days) / 30) + 1
         if reqmonths > 60:
             print('You have requested data beginning {}'.format(
                 start.strftime("%B,%Y")))
@@ -282,7 +309,7 @@ def main():
 
     start = '2018-12-31 11:30'
     end = '2018-12-31 16:05'
-    dummy, df = getiex_intraday('AAPL', start, end, minutes=1, showUrl=True)
+    dummy, df, noma = getiex_intraday('AAPL', start, end, minutes=1, showUrl=True)
     print(df)
 
 

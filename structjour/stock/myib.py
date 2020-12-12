@@ -1,3 +1,19 @@
+# Structjour -- a daily trade review helper
+# Copyright (C) 2019 Zero Substance Trading
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 '''
 Implement historicalData method from the IB API
 @author: Mike Petersen
@@ -6,18 +22,26 @@ Implement historicalData method from the IB API
 
 # import sys
 import datetime as dt
+import logging
 from threading import Thread
 import queue
 import pandas as pd
 
-from ibapi import wrapper
-from ibapi.client import EClient
+from PyQt5.QtCore import QSettings
 
-# from ibapi.wrapper import EWrapper
-from ibapi.common import TickerId
-from ibapi.contract import Contract
+from structjour.stock.utilities import checkForIbapi, excludeAfterHours
+if checkForIbapi():
 
-from stock.utilities import getLastWorkDay
+    from ibapi import wrapper
+    from ibapi.client import EClient
+
+    # from ibapi.wrapper import EWrapper
+    from ibapi.common import TickerId
+    from ibapi.contract import Contract
+else:
+    raise ImportError('\nIBAPI is not installed. The module myib cannot run.\n')
+
+from structjour.stock.utilities import getLastWorkDay, IbSettings, movingAverage
 
 
 # import time
@@ -37,7 +61,7 @@ def getLimits():
     '''
     Tell a little bit about the getHistory call
     '''
-    l = ''.join(['We are only interested, in this app, in chart info, aka historical data.\n',
+    lmt = ''.join(['We are only interested, in this app, in chart info, aka historical data.\n',
                  'IB will issue a Pacing violation when:...\n',
                  '       Making identical historical data requests within 15 seconds.\n',
                  '       Making six or more historical data requests for the same Contract',
@@ -46,7 +70,8 @@ def getLimits():
                  'Data older than 6 months for candles of 1 minute or less in unavailable.\n',
                  '      No hard limit for older data for intervals greater than 1 min (so they',
                  '      say in spite of the docs)\n'])
-    return l
+    return lmt
+
 
 def ni(i, minutes='minutes'):
     '''
@@ -58,8 +83,6 @@ def ni(i, minutes='minutes'):
     # find any discrepencies
     if not isinstance(i, int):
         raise ValueError('For ib.ni minutes must be an int')
-    # if minutes != 'minutes':
-    #     print(f'{minutes} is not supported yet. Setting to 1 min')
     durdict = {1: '1 min', 2: '2 mins', 3: '3 mins', 5: '5 mins', 10: '10 mins',
                15: '15 mins', 20: '20 mins', 30: '30 mins', 60: '1 hour'}
     resamp = False
@@ -70,13 +93,13 @@ def ni(i, minutes='minutes'):
         return (resamp, ('1 min', 1, i))
     return (False, ('', 0, 0))
 
+
 def validateDurString(s):
     '''
     Utility method to enforce an IB requirement.
     '''
     d = ['S', 'D', 'W', 'M', 'Y']
     sp = s.split()
-    # print(sp)
     if len(sp) != 2:
         return False
     if sp[1] not in d:
@@ -114,23 +137,22 @@ class TestWrapper(wrapper.EWrapper):
         I think if we receive this without asking for it, it means IB failed to locate a single
         match for a requested instrument
         '''
-        print("(POSSIBLE) WARNING: Is this the droid you were looking for?")
-        print(f"ContractDetails: {reqId} {contractDetails}")
+        pass
 
     def error(self, reqId: TickerId, errorCode: list, errorString: str):
         '''
         Overriden method to return all errors to us
         '''
         if reqId != -1:
-            print(f"Error: {reqId} {errorCode} {errorString}")
+            logging.error(f"Error: {reqId} {errorCode} {errorString}")
 
     def historicalData(self, reqId: int, bar):
         '''
         Overriden Callback from EWrapper. Drops off data 1 bar at a time in each call.
         '''
         if self.counter == 0:
-            l = []
-            l.append(bar)
+            dat = []
+            dat.append(bar)
         self.counter = self.counter + 1
         self.data.append([bar.date, bar.open, bar.high,
                           bar.low, bar.close, bar.volume])
@@ -145,21 +167,18 @@ class TestWrapper(wrapper.EWrapper):
         df = pd.DataFrame(self.data,
                           columns=['date', 'open', 'high', 'low', 'close', 'volume'])
         self.storage.put(df)
-        # GDF=df
-        # print(df)
-#         print(df.tail(2))
-        # exit()
 
 
 class TestApp(TestWrapper, TestClient):
     '''
     My very own double
     '''
-    def __init__(self, port, cid):
+    def __init__(self, port, cid, host):
         TestWrapper.__init__(self)
         TestClient.__init__(self, wrapprr=self)
         self.port = port
         self.cid = cid
+        self.host = host
         # ! [socket_init]
 
         self.started = False
@@ -185,17 +204,19 @@ class TestApp(TestWrapper, TestClient):
         :params dur: a string for how long before end should the chart begin "1 D"
         :params interval: candle len
         '''
+        # get value for exclue afterhours, 1==RTH only
+        AFTERHOURS = 1 if excludeAfterHours() else 0
 
         if not validateDurString(dur):
-            print("Duration must be formatted like '3 D' using S, D, W, M, or Y")
+            logging.warning("Duration must be formatted like '3 D' using S, D, W, M, or Y")
             return pd.DataFrame()
 
         if not isinstance(end, dt.datetime):
-            print("end must be formatted as a datetime object")
+            logging.warning("end must be formatted as a datetime object")
             return pd.DataFrame()
 
         if interval not in BAR_SIZE:
-            print('Bar size ({}) must be one of: {}'.format(interval, BAR_SIZE))
+            logging.warning('Bar size ({}) must be one of: {}'.format(interval, BAR_SIZE))
             return pd.DataFrame()
 
         # app = Ib()
@@ -217,11 +238,10 @@ class TestApp(TestWrapper, TestClient):
         # self.reqHistoricalData(18002, ContractSamples.ContFut(), timeStr,
         #                        "1 Y", "1 month", "TRADES", 0, 1, False, []);
         # queryTime = DateTime.Now.AddMonths(-6).ToString("yyyyMMdd HH:mm:ss");
-        self.reqHistoricalData(4001, contract, timeStr, dur,
-                               interval, "TRADES", 1, 1, False, [])
+        self.reqHistoricalData(port, contract, timeStr, dur,
+                               interval, "TRADES", AFTERHOURS, 1, False, [])
         # client.reqHistoricalData(4002, ContractSamples.EuropeanStock(), queryTime,
         #                          "10 D", "1 min", "TRADES", 1, 1, false, null);
-        # print('Requesting access')
 
         # self.run()
         thread = Thread(target=self.run)
@@ -232,26 +252,30 @@ class TestApp(TestWrapper, TestClient):
         try:
             x = self.storage.get(timeout=10)
             x.set_index('date', inplace=True)
-            # print("About to print the Da
             return x
         except queue.Empty as ex:
-            print("Request came back empty", ex.__class__.__name__, ex)
+            logging.error(f"Request came back empty {ex.__class__.__name__}")
+            logging.error(ex)
             return pd.DataFrame()
 
 
-def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
+def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy', key=None):
     '''
     An interface API to match the other getters. In this case its a substantial
-    dumbing down of the capabilities to our one specific need. Output will be limited
-    to minute candles (1,5,10,7 whatever) within a single day.
+    dumbing down of the capabilities to our one specific need. Output will be resampled
+    if necessary to return a df with intervals 1~60 minutes
     :params symbol: The stock to get
     :params start: A timedate object or time string for when to start. Defaults to the most recent
         weekday at open.
     :params end: A timedate object or time string for when to end. Defaults to the most recent biz
         day at close
-    :params minutes: The length of the candle. Defaults to 1 minute
+    :params minutes: The length of the candle, 1~60 minutes. Defaults to 1 minute
     :return (length, df):A DataFrame of the requested stuff and its length
     '''
+    apiset = QSettings('zero_substance/stockapi', 'structjour')
+    if not apiset.value('gotibapi', type=bool):
+        return {'message': 'ibapi is not installed', 'code': 666}, pd.DataFrame(), None
+    logging.info('***** IB *****')
     biz = getLastWorkDay()
     if not end:
         end = pd.Timestamp(biz.year, biz.month, biz.day, 16, 0)
@@ -261,38 +285,45 @@ def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
     end = pd.Timestamp(end)
 
     dur = ''
-    if (end-start).days < 1:
-        if ((end-start).seconds//3600) > 8:
-            dur = '1 D'
+    fullstart = end
+    fullstart = fullstart - pd.Timedelta(days=5)
+    if start < fullstart:
+        delt = end - start
+        fullstart = end - delt
+
+    if (end - fullstart).days < 1:
+        if ((end - fullstart).seconds // 3600) > 8:
+            dur = '2 D'
         else:
-            dur = f'{(end-start).seconds} S'
-    elif (end-start).days < 7:
-        dur = f'{(end-start).days + 1} D'
+            dur = f'{(end-fullstart).seconds} S'
+    elif (end - fullstart).days < 7:
+        dur = f'{(end-fullstart).days + 1} D'
     else:
-        dur = f'{(end-start).days} D'
-        print('Requests longer than 6 days are not supported. (for now)')
-        return 0, pd.DataFrame([], [])
+        dur = f'{(end-fullstart).days} D'
+        # return 0, pd.DataFrame([], [])
 
     # if the end = 9:31 and dur = 3 minutes, ib will retrieve a start of the preceding day @ 15:58
-    # This is unique behavior in implemeted apis. We will just let ib do whatever and cut off the
-    # beginning below.
+    # This is unique behavior in implemeted apis. We will just let ib do whatever and cut off any
+    # data prior to the requested data. In that we get no after hours, a request for 7 will begin
+    # at 9:30 (instead of the previous day at 1330)
 
     symb = symbol
-    # daDate = end
     (resamp, (interval, minutes, origminutes)) = ni(minutes)
-    # chart(symb, d, dur/, interval)
-    ib = TestApp(7496, 7878)
-    # def getHistorical(self, symbol, end, dur, interval, exchange='NASDAQ'):
-    df = ib.getHistorical(symb, end=end, dur=dur,
-                          interval=interval, exchange='NASDAQ')
+
+    # ib = TestApp(7496, 7878, '127.0.0.1')
+    # ib = TestApp(4002, 7979, '127.0.0.1')
+    x = IbSettings()
+    ibs = x.getIbSettings()
+    if not ibs:
+        return 0, pd.DataFrame(), None
+    ib = TestApp(ibs['port'], ibs['id'], ibs['host'])
+    df = ib.getHistorical(symb, end=end, dur=dur, interval=interval, exchange='NASDAQ')
     lendf = len(df)
     if lendf == 0:
-        return 0, df
+        return 0, df, None
 
-    # df.set_index(df.date)
+    # Normalize the date to our favorite format
     df.index = pd.to_datetime(df.index)
-    if start > df.index[0]:
-        df = df.loc[df.index >= start]
     if resamp:
         srate = f'{origminutes}T'
         df_ohlc = df[['open']].resample(srate).first()
@@ -302,31 +333,64 @@ def getib_intraday(symbol, start=None, end=None, minutes=1, showUrl='dummy'):
         df_ohlc['volume'] = df[['volume']].resample(srate).sum()
         df = df_ohlc.copy()
 
+    maDict = movingAverage(df.close, df, end)
+
+    if start > df.index[0]:
+        msg = f"Cutting off beginning: {df.index[0]} to begin at {start}"
+        logging.info(msg)
+        df = df.loc[df.index >= start]
+        if not df.high.any():
+            logging.warning('All data has been removed')
+            return 0, pd.DataFrame(), None
+        for ma in maDict:
+            maDict[ma] = maDict[ma].loc[maDict[ma].index >= start]
+    removeMe = list()
+    for key in maDict:
+        # VWAP is a reference that begins at market open. If the open trade precedes VWAP
+        # we will exclude it from the chart. Other possibilities: give VWAP a start time or
+        # pick an arbitrary premarket time to begin it. The former would be havoc to implement
+        # the latter probably better but inaccurate; would not reflect what the trader was using
+        # Better suggestions?
+        if key == 'vwap':
+            if len(maDict['vwap']) < 1 or (df.index[0] < maDict['vwap'].index[0]):
+                removeMe.append(key)
+                # del maDict['vwap']
+        else:
+            if len(df) != len(maDict[key]):
+                removeMe.append(key)
+                # del maDict[key]
+    for key in removeMe:
+        del maDict[key]
+
     ib.disconnect()
-    return len(df), df
+    return len(df), df, maDict
 
 
-    # df = getIb_Hist(symbol, end=end, dur=dur, interval=minutes)
-    # return df
 def isConnected():
     '''Call TestApp.isConnected and return result'''
-    host = '127.0.0.1'
-    port = 7496
-    clientId = 7878
-    ib = TestApp(host, port)
+    x = IbSettings()
+    ibs = x.getIbSettings()
+    if not ibs:
+        return None
+    host = ibs['host']
+    port = ibs['port']
+    clientId = ibs['id']
+    ib = TestApp(port, clientId, host)
     ib.connect(host, port, clientId)
     connected = ib.isConnected()
     if connected:
         ib.disconnect()
     return connected
 
+
 def main():
     '''test run'''
-    start = dt.datetime(2019, 1, 15, 9, 19)
-    end = dt.datetime(2019, 1, 15, 15, 5)
-    minutes = '1 min'
-    x, ddf = getib_intraday('SQ', start, end, minutes)
-    print(x, ddf.tail(3))
+    start = dt.datetime(2019, 10, 10, 7, 0)
+    end = dt.datetime(2019, 10, 10, 17, 0)
+    minutes = 15
+    x, ddf, maDict = getib_intraday('ROKU', start, end, minutes)
+    print(x, ddf)
+
 
 def notmain():
     '''Run some local code'''
@@ -334,6 +398,6 @@ def notmain():
 
 
 if __name__ == '__main__':
-    # main()
-    notmain()
-    
+    main()
+    # notmain()
+    # print(isConnected())
